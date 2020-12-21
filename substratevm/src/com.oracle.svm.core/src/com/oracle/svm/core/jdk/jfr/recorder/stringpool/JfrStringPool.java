@@ -129,7 +129,8 @@ public final class JfrStringPool implements JfrCheckpointClient {
         boolean epoch = JfrTraceIdEpoch.previousEpoch();
 
         int size = epoch ? sizeZero : sizeOne;
-        if (queue(epoch).size() > 0) {
+        Queue<JfrString> queue = queue(epoch);
+        if (queue.size() > 0) {
             // JFR.TODO optimize StringPool to write directly to buffer instead of storing
             // in queue
             JfrBuffer b = lease(size, true, Thread.currentThread());
@@ -139,8 +140,8 @@ public final class JfrStringPool implements JfrCheckpointClient {
             JfrTypeWriter stringWriter = new JfrTypeWriter(JfrTypes.JfrTypeId.TYPE_STRING.id, writer);
             try {
                 stringWriter.begin();
-                for (JfrString s : queue(epoch)) {
-                    stringWriter.incrementCount(writeString(writer, s));
+                while (!queue.isEmpty()) {
+                    stringWriter.incrementCount(writeString(writer, queue.poll()));
                 }
                 stringWriter.end();
             } catch (IOException e) {
