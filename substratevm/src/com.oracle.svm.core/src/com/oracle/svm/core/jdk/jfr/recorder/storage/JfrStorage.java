@@ -108,6 +108,7 @@ public final class JfrStorage implements JfrMemorySpace.Client {
         return this.postBox;
     }
 
+    @Override
     public void registerFull(JfrBuffer buffer, Thread thread) {
         assert (buffer != null);
         assert (buffer.isRetired());
@@ -265,7 +266,7 @@ public final class JfrStorage implements JfrMemorySpace.Client {
     private void discardOldest(Thread t) {
         if (this.bufferLock.tryLock()) {
             int fullPreDiscard = control.fullCount();
-            int fullPostDiscard = 0;
+            int fullPostDiscard = fullPreDiscard;
             int discardSize = 0;
             try {
                 if (!this.control.shouldDiscard()) {
@@ -346,7 +347,7 @@ public final class JfrStorage implements JfrMemorySpace.Client {
         assert (globalMSpace.free().isEmpty());
         assert (!globalMSpace.live().isEmpty());
 
-        globalMSpace.iterateLiveList(tldo);
+        globalMSpace.iterateLiveList(discardOp);
 
         return fullElements + discardOp.elements();
     }
@@ -372,9 +373,6 @@ public final class JfrStorage implements JfrMemorySpace.Client {
         assert (chunkWriter.isValid());
         int fullElements = writeFull(chunkWriter);
 
-        assert (globalMSpace.free().isEmpty());
-        assert (!globalMSpace.live().isEmpty());
-
         JfrBufferOperations.UnbufferedWriteToChunk<JfrBuffer> wo = new JfrBufferOperations.UnbufferedWriteToChunk<>(
                 chunkWriter);
         JfrBufferOperations.PredicatedConcurrentWrite<JfrBuffer> cnewo = new JfrBufferOperations.PredicatedConcurrentWrite<>(
@@ -386,6 +384,10 @@ public final class JfrStorage implements JfrMemorySpace.Client {
         JfrBufferOperations.CompositeAnd<JfrBuffer> tlop = new JfrBufferOperations.CompositeAnd<>(cnewo, rtlo);
 
         threadLocalMSpace.iterateLiveList(tlop);
+
+        assert (globalMSpace.free().isEmpty());
+        assert (!globalMSpace.live().isEmpty());
+        globalMSpace.iterateLiveList(cnewo);
 
         return fullElements + wo.elements();
     }
