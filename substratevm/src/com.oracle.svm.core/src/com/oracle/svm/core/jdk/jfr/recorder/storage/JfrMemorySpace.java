@@ -249,7 +249,9 @@ public class JfrMemorySpace<U extends JfrMemorySpaceRetrieval, V extends JfrMemo
             return b;
         }
 
-        return mspace.allocateLive(size);
+        b = mspace.allocateLive(size);
+        b.acquire(t);
+        return b;
     }
 
 }
