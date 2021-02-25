@@ -399,10 +399,6 @@ class SubstrateJVM {
 
     /** See {@link JVM#log}. */
     public void log(int tagSetId, int level, String message) {
-        if (level < LogLevel.WARN.ordinal() + 1) {
-            return;
-        }
-
         Log log = Log.log();
         log.string(getLogTag(tagSetId).toString());
         log.spaces(1);
@@ -410,6 +406,16 @@ class SubstrateJVM {
         log.spaces(1);
         log.string(message);
         log.newline();
+    }
+
+    @Uninterruptible(reason = "May be called by uninterruptible code", calleeMustBe = false, mayBeInlined = true)
+    public static void log(Object... obj) {
+        Log l = Log.log();
+        for (Object o : obj) {
+            l.string(o.toString());
+            l.spaces(1);
+        }
+        l.newline();
     }
 
     /** See {@link JVM#subscribeLogLevel}. */
