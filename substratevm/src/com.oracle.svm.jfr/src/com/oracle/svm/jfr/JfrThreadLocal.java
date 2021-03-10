@@ -211,17 +211,19 @@ public class JfrThreadLocal implements ThreadListener {
 
         JfrBuffer result = threadLocalBuffer;
         UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(threadLocalBuffer);
-        if (unflushedSize.aboveThan(0)) {
-            JfrGlobalMemory globalMemory = SubstrateJVM.getGlobalMemory();
-            if (globalMemory.write(threadLocalBuffer, unflushedSize)) {
-                // Copy all uncommitted memory to the start of the thread local buffer.
-                MemoryUtil.copyConjointMemoryAtomic(threadLocalBuffer.getPos(), JfrBufferAccess.getDataStart(threadLocalBuffer), uncommitted);
-                JfrBufferAccess.reinitialize(threadLocalBuffer);
-            } else {
-                JfrBufferAccess.reinitialize(threadLocalBuffer);
-                writeDataLoss(threadLocalBuffer, unflushedSize);
-                return WordFactory.nullPointer();
-            }
+        if (unflushedSize.equal(0)) {
+            JfrBufferAccess.reinitialize(threadLocalBuffer);
+            return result;
+        }
+        JfrGlobalMemory globalMemory = SubstrateJVM.getGlobalMemory();
+        if (globalMemory.write(threadLocalBuffer, unflushedSize)) {
+            // Copy all uncommitted memory to the start of the thread local buffer.
+            MemoryUtil.copyConjointMemoryAtomic(threadLocalBuffer.getPos(), JfrBufferAccess.getDataStart(threadLocalBuffer), uncommitted);
+            JfrBufferAccess.reinitialize(threadLocalBuffer);
+        } else {
+            JfrBufferAccess.reinitialize(threadLocalBuffer);
+            writeDataLoss(threadLocalBuffer, unflushedSize);
+            return WordFactory.nullPointer();
         }
 
         assert JfrBufferAccess.getUnflushedSize(threadLocalBuffer).equal(0);
@@ -235,7 +237,6 @@ public class JfrThreadLocal implements ThreadListener {
     private static void writeDataLoss(JfrBuffer buffer, UnsignedWord unflushedSize) {
         assert buffer.isNonNull();
         assert unflushedSize.aboveThan(0);
-        JfrBufferAccess.reinitialize(buffer);
         UnsignedWord totalDataLoss = increaseDataLost(unflushedSize);
         if (SubstrateJVM.isRecording() && SubstrateJVM.get().isEnabled(JfrEvents.DataLossEvent)) {
             JfrNativeEventWriterData data = StackValue.get(JfrNativeEventWriterData.class);
