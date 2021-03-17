@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,17 +25,20 @@
  */
 package com.oracle.svm.jfr;
 
-import com.oracle.svm.core.annotate.Alias;
-import com.oracle.svm.core.annotate.TargetClass;
+import org.graalvm.word.WordFactory;
 
-@TargetClass(value = jdk.jfr.internal.EventWriter.class, onlyWith = JfrEnabled.class)
-public final class Target_jdk_jfr_internal_EventWriter {
-    @Alias
-    @SuppressWarnings("unused")
-    boolean notified;
+import com.oracle.svm.core.annotate.Uninterruptible;
 
-    @Alias
-    @SuppressWarnings("unused")
-    Target_jdk_jfr_internal_EventWriter(long startPos, long maxPos, long startPosAddress, long threadID, boolean valid) {
+/**
+ * Tracks thread local buffers to allow iteration.
+ */
+public class JfrThreadLocalMemory {
+//    private static List<JfrBuffer> buffers = new ArrayList<>();
+
+    @Uninterruptible(reason = "Accesses a JFR buffer")
+    public static JfrBuffer acquireThreadLocalBuffer(long bufferSize) {
+        JfrBuffer buffer = JfrBufferAccess.allocate(WordFactory.unsigned(bufferSize));
+//        buffers.add(buffer);
+        return buffer;
     }
 }

@@ -31,10 +31,14 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.oracle.svm.core.thread.JavaThreads;
 import com.oracle.svm.core.thread.VMOperationControl;
+import com.oracle.svm.core.thread.VMThreads;
 import org.graalvm.compiler.core.common.NumUtil;
+import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
@@ -44,6 +48,7 @@ import com.oracle.svm.core.jdk.Target_java_nio_DirectByteBuffer;
 import com.oracle.svm.core.thread.JavaVMOperation;
 
 import jdk.jfr.internal.Logger;
+import org.graalvm.word.WordFactory;
 
 /**
  * This class is used when writing the in-memory JFR data to a file. For all operations, except
@@ -138,19 +143,25 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
     }
 
-    /**
-     * We are writing all the in-memory data to the file. However, even though we are at a
-     * safepoint, further JFR events can still be triggered by the current thread at any time. This
-     * includes allocation and GC events. Therefore, it is necessary that our whole JFR
-     * infrastructure is epoch-based. So, we can uninterruptibly switch to a new epoch before we
-     * start writing out the data of the old epoch.
-     */
-    // TODO: add more logic to all JfrRepositories so that it is possible to switch the epoch. The
-    // global JFR memory must also support different epochs.
+    @Uninterruptible(reason = "Called by uninterruptible code.")
+    public boolean writeAtSafepoint(JfrBuffer buffer) {
+        assert lock.isLocked();
+        int capacity = NumUtil.safeToInt(JfrBufferAccess.getUnflushedSize(buffer).rawValue());
+        Target_java_nio_DirectByteBuffer bb = new Target_java_nio_DirectByteBuffer(JfrBufferAccess.getDataStart(buffer).rawValue(), capacity);
+        FileChannel fc = file.getChannel();
+        try {
+            fc.write(SubstrateUtil.cast(bb, ByteBuffer.class));
+            return file.getFilePointer() > notificationThreshold;
+        } catch (IOException e) {
+            Logger.log(JFR_SYSTEM, ERROR, "Error while writing file " + filename + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+
     public void closeFile(byte[] metadataDescriptor, JfrRepository[] repositories) {
         assert lock.isHeldByCurrentThread();
-        JfrCloseFileOperation op = new JfrCloseFileOperation(metadataDescriptor, repositories);
-        op.enqueue();
+
     }
 
     private void writeFileHeader() throws IOException {
@@ -317,44 +328,18 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         return JfrNativeEventWriter.makePaddedInt(NumUtil.safeToInt(sizeWritten));
     }
 
-    private class JfrCloseFileOperation extends JavaVMOperation {
-        private final byte[] metadataDescriptor;
-        private final JfrRepository[] repositories;
 
-        protected JfrCloseFileOperation(byte[] metadataDescriptor, JfrRepository[] repositories) {
-            // Some of the JDK code that deals with files uses Java synchronization. So, we need to
-            // allow Java synchronization for this VM operation.
-            super("JFR close file", SystemEffect.SAFEPOINT, true);
-            this.metadataDescriptor = metadataDescriptor;
-            this.repositories = repositories;
+    public void closeChunk(JfrRepository[] repositories, byte[] metadataDescriptor) {
+        try {
+            long constantPoolPosition = writeCheckpointEvent(repositories);
+            long metadataPosition = writeMetadataEvent(metadataDescriptor);
+            patchFileHeader(constantPoolPosition, metadataPosition);
+            file.close();
+        } catch (IOException e) {
+            Logger.log(JFR_SYSTEM, ERROR, "Error while writing file " + filename + ": " + e.getMessage());
         }
 
-        @Override
-        protected void operate() {
-            changeEpoch();
-            try {
-                long constantPoolPosition = writeCheckpointEvent(repositories);
-                long metadataPosition = writeMetadataEvent(metadataDescriptor);
-                patchFileHeader(constantPoolPosition, metadataPosition);
-                file.close();
-            } catch (IOException e) {
-                Logger.log(JFR_SYSTEM, ERROR, "Error while writing file " + filename + ": " + e.getMessage());
-            }
-
-            filename = null;
-            file = null;
-        }
-
-        @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
-        private void changeEpoch() {
-            // TODO: We need to ensure that all JFR events that are triggered by the current thread
-            // are recorded for the next epoch. Otherwise, those JFR events could pollute the data
-            // that we currently try to persist. To ensure that, we must execute the following steps
-            // uninterruptibly:
-            //
-            // - Flush all thread-local buffers (native & Java) to global JFR memory.
-            // - Set all Java EventWriter.notified values
-            // - Change the epoch.
-        }
+        filename = null;
+        file = null;
     }
 }

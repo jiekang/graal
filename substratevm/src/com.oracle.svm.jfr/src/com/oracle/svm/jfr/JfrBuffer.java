@@ -57,6 +57,17 @@ public interface JfrBuffer extends PointerBase {
     }
 
     @RawField
+    Pointer getTop();
+
+    @RawField
+    void setTop(Pointer value);
+
+    @RawFieldOffset
+    static int offsetOfTop() {
+        throw VMError.unimplemented(); // replaced
+    }
+
+    @RawField
     int getAcquired();
 
     @RawField

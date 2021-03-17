@@ -40,6 +40,7 @@ import com.oracle.svm.core.annotate.Uninterruptible;
  * modifications that were interrupted by the safepoint.
  */
 public class JfrGlobalMemory {
+    private static final int BUFFER_FULL_ENOUGH_PERCENTAGE = 50;
     private static final int PROMOTION_RETRY_COUNT = 100;
 
     private long bufferCount;
@@ -92,7 +93,7 @@ public class JfrGlobalMemory {
         // Copy all committed but not yet flushed memory to the promotion buffer.
         JfrRecorderThread recorderThread = SubstrateJVM.getRecorderThread();
         assert JfrBufferAccess.getAvailableSize(promotionBuffer).aboveOrEqual(unflushedSize);
-        MemoryUtil.copyConjointMemoryAtomic(JfrBufferAccess.getDataStart(threadLocalBuffer), promotionBuffer.getPos(), unflushedSize);
+        MemoryUtil.copyConjointMemoryAtomic(JfrBufferAccess.getTop(threadLocalBuffer), promotionBuffer.getPos(), unflushedSize);
         JfrBufferAccess.increasePos(promotionBuffer, unflushedSize);
         boolean shouldSignal = recorderThread.shouldSignal(promotionBuffer);
         releasePromotionBuffer(promotionBuffer);
@@ -102,6 +103,28 @@ public class JfrGlobalMemory {
             recorderThread.signal();
         }
         return true;
+    }
+
+    public void persistBuffers(JfrChunkWriter chunkWriter) {
+        JfrBuffers buffers = getBuffers();
+        for (int i = 0; i < getBufferCount(); i++) {
+            JfrBuffer buffer = buffers.addressOf(i).read();
+            if (isFullEnough(buffer) && JfrBufferAccess.acquire(buffer)) {
+                boolean shouldNotify = chunkWriter.write(buffer);
+                JfrBufferAccess.reinitialize(buffer);
+                JfrBufferAccess.release(buffer);
+
+                if (shouldNotify) {
+                    Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notify();
+                }
+            }
+        }
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public boolean isFullEnough(JfrBuffer buffer) {
+        UnsignedWord bufferTargetSize = buffer.getSize().multiply(100).unsignedDivide(BUFFER_FULL_ENOUGH_PERCENTAGE);
+        return JfrBufferAccess.getAvailableSize(buffer).belowOrEqual(bufferTargetSize);
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")

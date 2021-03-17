@@ -160,6 +160,11 @@ public class JfrThreadLocal implements ThreadListener {
         return javaEventWriter.get();
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public Target_jdk_jfr_internal_EventWriter getEventWriter(IsolateThread thread) {
+        return javaEventWriter.get(thread);
+    }
+
     // If a safepoint happens in this method, the state that another thread can see is always
     // sufficiently consistent as the JFR buffer is still empty. So, this method does not need to be
     // uninterruptible.
@@ -188,10 +193,16 @@ public class JfrThreadLocal implements ThreadListener {
         VMError.guarantee(traceId.get() > 0, "Thread local JFR data must be initialized");
         JfrBuffer result = javaBuffer.get();
         if (result.isNull()) {
-            result = JfrBufferAccess.allocate(WordFactory.unsigned(threadLocalBufferSize));
+            result = JfrThreadLocalMemory.acquireThreadLocalBuffer(threadLocalBufferSize);
             javaBuffer.set(result);
         }
         return result;
+    }
+
+    @Uninterruptible(reason = "Accesses a JFR buffer.")
+    public JfrBuffer getJavaBuffer(IsolateThread thread) {
+        VMError.guarantee(traceId.get() > 0, "Thread local JFR data must be initialized");
+        return javaBuffer.get(thread);
     }
 
     @Uninterruptible(reason = "Accesses a JFR buffer.", callerMustBe = true)
@@ -199,7 +210,7 @@ public class JfrThreadLocal implements ThreadListener {
         VMError.guarantee(traceId.get() > 0, "Thread local JFR data must be initialized");
         JfrBuffer result = nativeBuffer.get();
         if (result.isNull()) {
-            result = JfrBufferAccess.allocate(WordFactory.unsigned(threadLocalBufferSize));
+            result = JfrThreadLocalMemory.acquireThreadLocalBuffer(threadLocalBufferSize);
             nativeBuffer.set(result);
         }
         return result;

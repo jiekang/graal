@@ -68,6 +68,7 @@ class SubstrateJVM {
 
     private final JfrThreadLocal threadLocal;
     private final JfrGlobalMemory globalMemory;
+    private final JfrRecorderService recorderService;
     private final JfrUnlockedChunkWriter unlockedChunkWriter;
     private final JfrRecorderThread recorderThread;
 
@@ -97,6 +98,7 @@ class SubstrateJVM {
 
         threadLocal = new JfrThreadLocal();
         globalMemory = new JfrGlobalMemory();
+        recorderService = new JfrRecorderService(globalMemory, threadLocal);
         unlockedChunkWriter = new JfrChunkWriter();
         recorderThread = new JfrRecorderThread(globalMemory, unlockedChunkWriter);
 
@@ -262,7 +264,7 @@ class SubstrateJVM {
             if (recording) {
                 boolean existingFile = chunkWriter.hasOpenFile();
                 if (existingFile) {
-                    chunkWriter.closeFile(metadataDescriptor, repositories);
+                    recorderService.rotate(chunkWriter, metadataDescriptor, repositories);
                 }
 
                 if (file != null) {
@@ -434,6 +436,16 @@ class SubstrateJVM {
     /** See {@link JVM#getEventWriter}. */
     public Target_jdk_jfr_internal_EventWriter getEventWriter() {
         return threadLocal.getEventWriter();
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public Target_jdk_jfr_internal_EventWriter getEventWriter(IsolateThread thread) {
+        return threadLocal.getEventWriter(thread);
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public JfrBuffer getThreadLocalBuffer(IsolateThread thread) {
+        return threadLocal.getJavaBuffer(thread);
     }
 
     /** See {@link JVM#newEventWriter}. */
