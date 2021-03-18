@@ -205,6 +205,13 @@ public class JfrThreadLocal implements ThreadListener {
         return result;
     }
 
+    @Uninterruptible(reason = "Called by uninterruptible code.", callerMustBe = true)
+    public static void notifyEventWriter(IsolateThread thread) {
+        if (javaEventWriter.get(thread) != null) {
+            javaEventWriter.get(thread).notified = true;
+        }
+    }
+
     @Uninterruptible(reason = "Accesses a JFR buffer.")
     public static JfrBuffer flush(JfrBuffer threadLocalBuffer, UnsignedWord uncommitted, int requested) {
         assert threadLocalBuffer.isNonNull();
@@ -230,6 +237,30 @@ public class JfrThreadLocal implements ThreadListener {
         }
         return WordFactory.nullPointer();
     }
+
+
+    @Uninterruptible(reason = "Accesses a JFR buffer.")
+    public static void flushAndNotifyAtSafepoint(IsolateThread thread) {
+        if (javaBuffer.get(thread).isNonNull()) {
+            flushBufferAtSafepoint(javaBuffer.get(thread));
+            notifyEventWriter(thread);
+        }
+        if (nativeBuffer.get(thread).isNonNull()) {
+            flushBufferAtSafepoint(nativeBuffer.get(thread));
+        }
+    }
+
+
+    @Uninterruptible(reason = "Accesses a JFR buffer.")
+    private static void flushBufferAtSafepoint(JfrBuffer threadLocalBuffer) {
+        assert threadLocalBuffer.isNonNull();
+        UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(threadLocalBuffer);
+        if (unflushedSize.aboveThan(0)) {
+            JfrGlobalMemory globalMemory = SubstrateJVM.getGlobalMemory();
+            globalMemory.write(threadLocalBuffer, unflushedSize);
+        }
+    }
+
 
     @Uninterruptible(reason = "Accesses a JFR buffer.")
     private static void writeDataLoss(JfrBuffer buffer, UnsignedWord unflushedSize) {

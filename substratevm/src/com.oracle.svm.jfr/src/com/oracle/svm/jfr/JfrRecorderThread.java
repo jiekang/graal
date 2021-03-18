@@ -24,8 +24,6 @@
  */
 package com.oracle.svm.jfr;
 
-import org.graalvm.word.UnsignedWord;
-
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.locks.VMCondition;
 import com.oracle.svm.core.locks.VMMutex;
@@ -37,9 +35,7 @@ import com.oracle.svm.core.util.VMError;
  * a file.
  */
 public class JfrRecorderThread extends Thread {
-    private static final int BUFFER_FULL_ENOUGH_PERCENTAGE = 50;
-
-    private final JfrGlobalMemory globalMemory;
+    private final JfrRecorderService recorderService;
     private final JfrUnlockedChunkWriter unlockedChunkWriter;
     private final VMMutex mutex;
     private final VMCondition condition;
@@ -47,9 +43,9 @@ public class JfrRecorderThread extends Thread {
     private volatile boolean notified;
     private volatile boolean stopped;
 
-    public JfrRecorderThread(JfrGlobalMemory globalMemory, JfrUnlockedChunkWriter unlockedChunkWriter) {
+    public JfrRecorderThread(JfrRecorderService recorderService, JfrUnlockedChunkWriter unlockedChunkWriter) {
         super("JFR Recorder Thread");
-        this.globalMemory = globalMemory;
+        this.recorderService = recorderService;
         this.unlockedChunkWriter = unlockedChunkWriter;
         this.mutex = new VMMutex();
         this.condition = new VMCondition(mutex);
@@ -69,7 +65,7 @@ public class JfrRecorderThread extends Thread {
                 JfrChunkWriter chunkWriter = unlockedChunkWriter.lock();
                 try {
                     if (chunkWriter.hasOpenFile()) {
-                        persistBuffers(chunkWriter);
+                        recorderService.persistBuffers(chunkWriter);
                     }
                 } finally {
                     chunkWriter.unlock();
@@ -92,26 +88,6 @@ public class JfrRecorderThread extends Thread {
         }
     }
 
-    private void persistBuffers(JfrChunkWriter chunkWriter) {
-        JfrBuffers buffers = globalMemory.getBuffers();
-        for (int i = 0; i < globalMemory.getBufferCount(); i++) {
-            JfrBuffer buffer = buffers.addressOf(i).read();
-            if (isFullEnough(buffer) && JfrBufferAccess.acquire(buffer)) {
-                boolean shouldNotify = chunkWriter.write(buffer);
-                JfrBufferAccess.reinitialize(buffer);
-                JfrBufferAccess.release(buffer);
-
-                if (shouldNotify) {
-                    //Checkstyle: stop
-                    synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
-                        Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
-                    }
-                    //Checkstyle: resume
-                }
-            }
-        }
-    }
-
     /**
      * We need to be a bit careful with this method as the recorder thread can't do anything if the
      * chunk writer doesn't have an output file.
@@ -124,12 +100,8 @@ public class JfrRecorderThread extends Thread {
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public boolean shouldSignal(JfrBuffer buffer) {
-        return isFullEnough(buffer) && unlockedChunkWriter.hasOpenFile();
+        return JfrRecorderService.isFullEnough(buffer) && unlockedChunkWriter.hasOpenFile();
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
-    private static boolean isFullEnough(JfrBuffer buffer) {
-        UnsignedWord bufferTargetSize = buffer.getSize().multiply(100).unsignedDivide(BUFFER_FULL_ENOUGH_PERCENTAGE);
-        return JfrBufferAccess.getAvailableSize(buffer).belowOrEqual(bufferTargetSize);
-    }
+
 }

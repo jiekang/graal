@@ -56,6 +56,7 @@ class SubstrateJVM {
 
     private final JfrThreadLocal threadLocal;
     private final JfrGlobalMemory globalMemory;
+    private final JfrRecorderService recorderService;
     private final JfrUnlockedChunkWriter unlockedChunkWriter;
     private final JfrRecorderThread recorderThread;
 
@@ -84,8 +85,9 @@ class SubstrateJVM {
 
         threadLocal = new JfrThreadLocal();
         globalMemory = new JfrGlobalMemory();
-        unlockedChunkWriter = new JfrChunkWriter();
-        recorderThread = new JfrRecorderThread(globalMemory, unlockedChunkWriter);
+        recorderService = new JfrRecorderService(globalMemory);
+        unlockedChunkWriter = new JfrChunkWriter(globalMemory);
+        recorderThread = new JfrRecorderThread(recorderService, unlockedChunkWriter);
 
         initialized = false;
         recording = false;
@@ -244,7 +246,7 @@ class SubstrateJVM {
             if (recording) {
                 boolean existingFile = chunkWriter.hasOpenFile();
                 if (existingFile) {
-                    chunkWriter.closeFile(metadataDescriptor, repositories);
+                    recorderService.rotateChunk(chunkWriter, metadataDescriptor, repositories);
                 }
 
                 if (file != null) {
