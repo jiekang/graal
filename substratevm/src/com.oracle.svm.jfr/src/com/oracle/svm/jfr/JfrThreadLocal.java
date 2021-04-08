@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.jfr;
 
+import com.oracle.svm.core.log.Log;
 import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
@@ -209,7 +210,6 @@ public class JfrThreadLocal implements ThreadListener {
     public static JfrBuffer flush(JfrBuffer threadLocalBuffer, UnsignedWord uncommitted, int requested) {
         assert threadLocalBuffer.isNonNull();
 
-        JfrBuffer result = threadLocalBuffer;
         UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(threadLocalBuffer);
         if (unflushedSize.aboveThan(0)) {
             JfrGlobalMemory globalMemory = SubstrateJVM.getGlobalMemory();
@@ -225,8 +225,8 @@ public class JfrThreadLocal implements ThreadListener {
         }
 
         assert JfrBufferAccess.getUnflushedSize(threadLocalBuffer).equal(0);
-        if (result.getSize().aboveOrEqual(uncommitted.add(requested))) {
-            return result;
+        if (JfrBufferAccess.getAvailableSize(threadLocalBuffer).aboveOrEqual(requested)) {
+            return threadLocalBuffer;
         }
         return WordFactory.nullPointer();
     }
