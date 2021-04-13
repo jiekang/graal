@@ -86,7 +86,7 @@ class SubstrateJVM {
         threadLocal = new JfrThreadLocal();
         globalMemory = new JfrGlobalMemory();
         recorderService = new JfrRecorderService(globalMemory);
-        unlockedChunkWriter = new JfrChunkWriter(globalMemory);
+        unlockedChunkWriter = new JfrChunkWriter();
         recorderThread = new JfrRecorderThread(recorderService, unlockedChunkWriter);
 
         initialized = false;

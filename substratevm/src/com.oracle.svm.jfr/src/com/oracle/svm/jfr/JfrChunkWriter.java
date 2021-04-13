@@ -61,10 +61,8 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     private static final int JFR_VERSION_MINOR = 0;
     private static final int CHUNK_SIZE_OFFSET = 8;
 
-
     private final ReentrantLock lock;
     private final boolean compressedInts;
-    private final JfrGlobalMemory globalMemory;
     private long notificationThreshold;
 
     private String filename;
@@ -73,10 +71,9 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     private long chunkStartNanos;
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public JfrChunkWriter(JfrGlobalMemory globalMemory) {
+    public JfrChunkWriter() {
         this.lock = new ReentrantLock();
         this.compressedInts = true;
-        this.globalMemory = globalMemory;
     }
 
     @Override
