@@ -72,6 +72,7 @@ public final class JfrBufferAccess {
     public static void reinitialize(JfrBuffer buffer) {
         Pointer pos = getDataStart(buffer);
         buffer.setPos(pos);
+        buffer.setTop(pos);
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -113,12 +114,17 @@ public final class JfrBufferAccess {
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static UnsignedWord getUnflushedSize(JfrBuffer buffer) {
-        return buffer.getPos().subtract(getDataStart(buffer));
+        return buffer.getPos().subtract(buffer.getTop());
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static void increasePos(JfrBuffer buffer, UnsignedWord delta) {
         buffer.setPos(buffer.getPos().add(delta));
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static void increaseTop(JfrBuffer buffer, UnsignedWord delta) {
+        buffer.setTop(buffer.getTop().add(delta));
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)

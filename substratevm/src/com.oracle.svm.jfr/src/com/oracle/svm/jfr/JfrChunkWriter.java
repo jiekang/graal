@@ -138,6 +138,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         if (!success) {
             return false;
         }
+        JfrBufferAccess.increaseTop(buffer, unflushedSize);
         return fileOperationSupport.position(fd).rawValue() > notificationThreshold;
     }
 

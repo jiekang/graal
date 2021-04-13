@@ -92,11 +92,11 @@ public class JfrGlobalMemory {
         // Copy all committed but not yet flushed memory to the promotion buffer.
         JfrRecorderThread recorderThread = SubstrateJVM.getRecorderThread();
         assert JfrBufferAccess.getAvailableSize(promotionBuffer).aboveOrEqual(unflushedSize);
-        UnmanagedMemoryUtil.copy(JfrBufferAccess.getDataStart(threadLocalBuffer), promotionBuffer.getPos(), unflushedSize);
+        UnmanagedMemoryUtil.copy(threadLocalBuffer.getTop(), promotionBuffer.getPos(), unflushedSize);
         JfrBufferAccess.increasePos(promotionBuffer, unflushedSize);
         boolean shouldSignal = recorderThread.shouldSignal(promotionBuffer);
         releasePromotionBuffer(promotionBuffer);
-
+        JfrBufferAccess.increaseTop(threadLocalBuffer, unflushedSize);
         // Notify the thread that writes the global memory to disk.
         if (shouldSignal) {
             recorderThread.signal();
