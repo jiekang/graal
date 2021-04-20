@@ -28,7 +28,6 @@ package com.oracle.svm.jfr.traceid;
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.heap.Heap;
 import com.oracle.svm.core.jdk.UninterruptibleUtils;
-import com.oracle.svm.core.thread.VMOperation;
 
 import java.util.function.Consumer;
 
@@ -72,7 +71,6 @@ public class JfrTraceIdLoadBarrier {
     }
 
     public static int classCount(boolean epoch) {
-        assert VMOperation.isInProgressAtSafepoint();
         return epoch ? classCount1.get() : classCount0.get();
     }
 
@@ -92,7 +90,6 @@ public class JfrTraceIdLoadBarrier {
     public interface ClassConsumer extends Consumer<Class<?>> {}
 
     public static void doClasses(ClassConsumer kc, boolean epoch) {
-        assert VMOperation.isInProgressAtSafepoint();
         long predicate = JfrTraceId.TRANSIENT_BIT;
         predicate |= epoch ? JfrTraceIdEpoch.EPOCH_1_BIT : JfrTraceIdEpoch.EPOCH_0_BIT;
         int usedClassCount = 0;

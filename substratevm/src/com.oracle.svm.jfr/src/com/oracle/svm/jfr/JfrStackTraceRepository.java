@@ -24,8 +24,6 @@
  */
 package com.oracle.svm.jfr;
 
-import java.io.IOException;
-
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -44,7 +42,6 @@ import com.oracle.svm.core.UnmanagedMemoryUtil;
 import com.oracle.svm.core.annotate.NeverInline;
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.c.struct.PinnedObjectField;
-import com.oracle.svm.core.thread.VMOperation;
 import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.jfr.JfrMethodRepository.MethodInfo;
 
@@ -102,8 +99,7 @@ public class JfrStackTraceRepository implements JfrRepository {
     }
 
     @Override
-    public int write(JfrChunkWriter writer) throws IOException {
-        assert VMOperation.isInProgressAtSafepoint();
+    public int write(JfrChunkWriter writer) {
         if (table.getSize() == 0) {
             return 0;
         }

@@ -24,7 +24,6 @@
  */
 package com.oracle.svm.jfr;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -34,7 +33,6 @@ import org.graalvm.nativeimage.Platforms;
 import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.annotate.UnknownObjectField;
 import com.oracle.svm.core.locks.VMMutex;
-import com.oracle.svm.core.thread.VMOperation;
 
 public class JfrMethodRepository implements JfrRepository {
     private final VMMutex mutex;
@@ -76,8 +74,7 @@ public class JfrMethodRepository implements JfrRepository {
     }
 
     @Override
-    public int write(JfrChunkWriter writer) throws IOException {
-        assert VMOperation.isInProgressAtSafepoint();
+    public int write(JfrChunkWriter writer) {
         if (count == 0) {
             return 0;
         }

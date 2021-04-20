@@ -73,6 +73,18 @@ public interface JfrBuffer extends PointerBase {
     }
 
     /**
+     * Gets the flushed position. Any data before this position has been written to disk
+     */
+    @RawField
+    Pointer getTop();
+
+    /**
+     * Sets the flushed position
+     */
+    @RawField
+    void setTop(Pointer value);
+
+    /**
      * Gets the acquired value. Used to control concurrent access to the buffer.
      * @see JfrBufferAccess#acquire(JfrBuffer)
      * @see JfrBufferAccess#release(JfrBuffer)
