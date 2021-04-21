@@ -32,7 +32,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.graalvm.compiler.core.common.NumUtil;
-import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.SignedWord;
@@ -80,7 +79,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     @Override
     public void initialize(long maxChunkSize) {
-        this.fileOperationSupport = ImageSingletons.lookup(RawFileOperationSupport.class);
+        this.fileOperationSupport = RawFileOperationSupport.bigEndian();
         this.notificationThreshold = maxChunkSize;
     }
 
