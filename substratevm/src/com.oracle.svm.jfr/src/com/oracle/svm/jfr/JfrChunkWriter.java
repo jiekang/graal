@@ -31,7 +31,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.oracle.svm.core.thread.VMOperation;
+import com.oracle.svm.core.thread.VMThreads;
+import com.oracle.svm.jfr.traceid.JfrTraceIdEpoch;
 import org.graalvm.compiler.core.common.NumUtil;
+import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.word.SignedWord;
@@ -129,6 +133,21 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     public boolean write(JfrBuffer buffer) {
         assert lock.isHeldByCurrentThread()  || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
+        UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(buffer);
+        if (unflushedSize.equal(0)) {
+            return false;
+        }
+
+        boolean success = fileOperationSupport.write(fd, JfrBufferAccess.getDataStart(buffer), unflushedSize);
+        if (!success) {
+            return false;
+        }
+        return fileOperationSupport.position(fd).rawValue() > notificationThreshold;
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public boolean writeAtSafepoint(JfrBuffer buffer) {
+        assert VMOperation.isInProgressAtSafepoint();
         UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(buffer);
         if (unflushedSize.equal(0)) {
             return false;
@@ -410,9 +429,21 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             // that we currently try to persist. To ensure that, we must execute the following steps
             // uninterruptibly:
             //
-            // - Flush all thread-local buffers (native & Java) to global JFR memory.
+            // - Flush all buffers to disk
             // - Set all Java EventWriter.notified values
             // - Change the epoch.
+            for (IsolateThread thread = VMThreads.firstThread(); thread.isNonNull(); thread = VMThreads.nextThread(thread)) {
+                JfrBuffer b = JfrThreadLocal.getJavaBuffer(thread);
+                if (b.isNonNull()) {
+                    writeAtSafepoint(b);
+                    JfrThreadLocal.notifyEventWriter(thread);
+                }
+                b = JfrThreadLocal.getNativeBuffer(thread);
+                if (b.isNonNull()) {
+                    writeAtSafepoint(b);
+                }
+            }
+            JfrTraceIdEpoch.getInstance().changeEpoch();
         }
     }
 }
