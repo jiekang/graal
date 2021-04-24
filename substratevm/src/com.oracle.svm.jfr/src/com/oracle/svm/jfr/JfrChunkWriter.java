@@ -421,11 +421,18 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
         @Override
         protected void operate() {
-            changeEpoch();
+            boolean shouldNotify = changeEpoch();
+            if (shouldNotify) {
+                //Checkstyle: stop
+                synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
+                    Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
+                }
+                //Checkstyle: resume
+            }
         }
 
         @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
-        private void changeEpoch() {
+        private boolean changeEpoch() {
             // TODO: We need to ensure that all JFR events that are triggered by the current thread
             // are recorded for the next epoch. Otherwise, those JFR events could pollute the data
             // that we currently try to persist. To ensure that, we must execute the following steps
@@ -434,6 +441,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             // - Flush all buffers (native, Java and global) to disk
             // - Set all Java EventWriter.notified values
             // - Change the epoch
+            boolean shouldNotify = false;
             for (IsolateThread thread = VMThreads.firstThread(); thread.isNonNull(); thread = VMThreads.nextThread(thread)) {
                 JfrBuffer b = JfrThreadLocal.getJavaBuffer(thread);
                 if (b.isNonNull()) {
@@ -450,20 +458,13 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             for (int i = 0; i < globalMemory.getBufferCount(); i++) {
                 JfrBuffer buffer = buffers.addressOf(i).read();
                 if (JfrBufferAccess.acquire(buffer)) {
-                    boolean shouldNotify = writeAtSafepoint(buffer);
+                    shouldNotify = writeAtSafepoint(buffer);
                     JfrBufferAccess.reinitialize(buffer);
                     JfrBufferAccess.release(buffer);
-
-                    if (shouldNotify) {
-                        //Checkstyle: stop
-                        synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
-                            Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
-                        }
-                        //Checkstyle: resume
-                    }
                 }
             }
             JfrTraceIdEpoch.getInstance().changeEpoch();
+            return shouldNotify;
         }
     }
 }
