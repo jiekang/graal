@@ -458,7 +458,9 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             for (int i = 0; i < globalMemory.getBufferCount(); i++) {
                 JfrBuffer buffer = buffers.addressOf(i).read();
                 if (JfrBufferAccess.acquire(buffer)) {
-                    shouldNotify = writeAtSafepoint(buffer);
+                    if (writeAtSafepoint(buffer) && !shouldNotify) {
+                        shouldNotify = true;
+                    }
                     JfrBufferAccess.reinitialize(buffer);
                     JfrBufferAccess.release(buffer);
                 }
