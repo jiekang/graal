@@ -65,6 +65,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     private static final short JFR_VERSION_MINOR = 0;
     private static final int CHUNK_SIZE_OFFSET = 8;
 
+    private final JfrGlobalMemory globalMemory;
 
     private final ReentrantLock lock;
     private final boolean compressedInts;
@@ -77,9 +78,10 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     private long chunkStartNanos;
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public JfrChunkWriter() {
+    public JfrChunkWriter(JfrGlobalMemory globalMemory) {
         this.lock = new ReentrantLock();
         this.compressedInts = true;
+        this.globalMemory = globalMemory;
     }
 
     @Override
@@ -441,6 +443,24 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
                 b = JfrThreadLocal.getNativeBuffer(thread);
                 if (b.isNonNull()) {
                     writeAtSafepoint(b);
+                }
+            }
+
+            JfrBuffers buffers = globalMemory.getBuffers();
+            for (int i = 0; i < globalMemory.getBufferCount(); i++) {
+                JfrBuffer buffer = buffers.addressOf(i).read();
+                if (JfrBufferAccess.acquire(buffer)) {
+                    boolean shouldNotify = writeAtSafepoint(buffer);
+                    JfrBufferAccess.reinitialize(buffer);
+                    JfrBufferAccess.release(buffer);
+
+                    if (shouldNotify) {
+                        //Checkstyle: stop
+                        synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
+                            Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
+                        }
+                        //Checkstyle: resume
+                    }
                 }
             }
             JfrTraceIdEpoch.getInstance().changeEpoch();
