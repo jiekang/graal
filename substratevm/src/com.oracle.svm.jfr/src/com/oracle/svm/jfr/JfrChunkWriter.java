@@ -42,6 +42,7 @@ import com.oracle.svm.core.annotate.Uninterruptible;
 import com.oracle.svm.core.os.RawFileOperationSupport;
 import com.oracle.svm.core.thread.JavaVMOperation;
 import com.oracle.svm.core.thread.VMOperationControl;
+import com.oracle.svm.jfr.traceid.JfrTraceIdEpoch;
 
 import jdk.jfr.internal.Logger;
 
@@ -411,6 +412,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             // - Flush all thread-local buffers (native & Java) to global JFR memory.
             // - Set all Java EventWriter.notified values
             // - Change the epoch.
+            JfrTraceIdEpoch.getInstance().changeEpoch();
         }
     }
 }
