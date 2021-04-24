@@ -153,8 +153,19 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     // global JFR memory must also support different epochs.
     public void closeFile(byte[] metadataDescriptor, JfrRepository[] repositories) {
         assert lock.isHeldByCurrentThread();
-        JfrCloseFileOperation op = new JfrCloseFileOperation(metadataDescriptor, repositories);
+        JfrCloseFileOperation op = new JfrCloseFileOperation();
         op.enqueue();
+
+        try {
+            SignedWord constantPoolPosition = writeCheckpointEvent(repositories);
+            SignedWord metadataPosition = writeMetadataEvent(metadataDescriptor);
+            patchFileHeader(constantPoolPosition, metadataPosition);
+            fileOperationSupport.close(fd);
+        } catch (IOException e) {
+            Logger.log(JFR_SYSTEM, ERROR, "Error while writing file " + filename + ": " + e.getMessage());
+        }
+
+        filename = null;
     }
 
     private void writeFileHeader() throws IOException {
@@ -378,30 +389,16 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     }
 
     private class JfrCloseFileOperation extends JavaVMOperation {
-        private final byte[] metadataDescriptor;
-        private final JfrRepository[] repositories;
 
-        protected JfrCloseFileOperation(byte[] metadataDescriptor, JfrRepository[] repositories) {
+        protected JfrCloseFileOperation() {
             // Some of the JDK code that deals with files uses Java synchronization. So, we need to
             // allow Java synchronization for this VM operation.
             super("JFR close file", SystemEffect.SAFEPOINT, true);
-            this.metadataDescriptor = metadataDescriptor;
-            this.repositories = repositories;
         }
 
         @Override
         protected void operate() {
             changeEpoch();
-            try {
-                SignedWord constantPoolPosition = writeCheckpointEvent(repositories);
-                SignedWord metadataPosition = writeMetadataEvent(metadataDescriptor);
-                patchFileHeader(constantPoolPosition, metadataPosition);
-                fileOperationSupport.close(fd);
-            } catch (IOException e) {
-                Logger.log(JFR_SYSTEM, ERROR, "Error while writing file " + filename + ": " + e.getMessage());
-            }
-
-            filename = null;
         }
 
         @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
