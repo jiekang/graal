@@ -205,6 +205,13 @@ public class JfrThreadLocal implements ThreadListener {
         return result;
     }
 
+    @Uninterruptible(reason = "Called by uninterruptible code.", callerMustBe = true)
+    public static void notifyEventWriter(IsolateThread thread) {
+        if (javaEventWriter.get(thread) != null) {
+            javaEventWriter.get(thread).notified = true;
+        }
+    }
+
     @Uninterruptible(reason = "Accesses a JFR buffer.")
     public static JfrBuffer flush(JfrBuffer threadLocalBuffer, UnsignedWord uncommitted, int requested) {
         assert threadLocalBuffer.isNonNull();
