@@ -133,9 +133,9 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
     }
 
-
     @Uninterruptible(reason = "Called by uninterruptible code", mayBeInlined = true)
     public boolean write(JfrBuffer buffer) {
+        assert (JfrBufferAccess.isAcquired(buffer) || VMOperation.isInProgressAtSafepoint());
         UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(buffer);
         if (unflushedSize.equal(0)) {
             return false;
@@ -146,7 +146,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             return false;
         }
         JfrBufferAccess.increaseTop(buffer, unflushedSize);
-        return getFileSupport().position(fd).rawValue() > notificationThreshold;
+        return getFileSupport().position(fd).greaterThan(WordFactory.signed(notificationThreshold));
     }
 
     /**
@@ -420,6 +420,16 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             }
         }
 
+        /**
+         * We need to ensure that all JFR events that are triggered by the current thread
+         * are recorded for the next epoch. Otherwise, those JFR events could pollute the data
+         * that we currently try to persist. To ensure that, we must execute the following steps
+         * uninterruptibly:
+         * - Flush all buffers (native, Java and global) to disk
+         * - Set all Java EventWriter.notified values
+         * - Change the epoch
+         * @return Whether to notify of file changes
+         */
         @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
         private boolean changeEpoch() {
             // TODO: We need to ensure that all JFR events that are triggered by the current thread
@@ -446,13 +456,11 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             JfrBuffers buffers = globalMemory.getBuffers();
             for (int i = 0; i < globalMemory.getBufferCount(); i++) {
                 JfrBuffer buffer = buffers.addressOf(i).read();
-                if (JfrBufferAccess.acquire(buffer)) {
-                    if (write(buffer) && !shouldNotify) {
-                        shouldNotify = true;
-                    }
-                    JfrBufferAccess.reinitialize(buffer);
-                    JfrBufferAccess.release(buffer);
+                assert !JfrBufferAccess.isAcquired(buffer);
+                if (write(buffer) && !shouldNotify) {
+                    shouldNotify = true;
                 }
+                JfrBufferAccess.reinitialize(buffer);
             }
             JfrTraceIdEpoch.getInstance().changeEpoch();
             return shouldNotify;
