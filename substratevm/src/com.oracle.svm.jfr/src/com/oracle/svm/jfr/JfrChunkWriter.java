@@ -102,7 +102,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     @Override
     public boolean hasOpenFile() {
-        return filename != null;
+        return getFileSupport().isValid(fd);
     }
 
     public void setFilename(String filename) {

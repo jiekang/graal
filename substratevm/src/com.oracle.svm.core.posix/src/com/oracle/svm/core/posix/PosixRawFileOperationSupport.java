@@ -65,10 +65,11 @@ public class PosixRawFileOperationSupport extends AbstractRawFileOperationSuppor
         }
     }
 
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     @Override
     public boolean isValid(RawFileDescriptor fd) {
         int posixFd = getPosixFileDescriptor(fd);
-        return posixFd >= 0;
+        return posixFd > 0;
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
