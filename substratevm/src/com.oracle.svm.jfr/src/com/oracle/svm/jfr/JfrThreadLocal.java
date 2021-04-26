@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.jfr;
 
+import com.oracle.svm.core.thread.VMOperation;
 import org.graalvm.nativeimage.CurrentIsolate;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
@@ -205,17 +206,19 @@ public class JfrThreadLocal implements ThreadListener {
         return result;
     }
 
-    @Uninterruptible(reason = "Accesses a JFR buffer.")
+    @Uninterruptible(reason = "Accesses a JFR buffer.", callerMustBe = true)
     public static JfrBuffer getJavaBuffer(IsolateThread thread) {
+        assert(VMOperation.isInProgressAtSafepoint());
         return javaBuffer.get(thread);
     }
 
     @Uninterruptible(reason = "Accesses a JFR buffer.", callerMustBe = true)
     public static JfrBuffer getNativeBuffer(IsolateThread thread) {
+        assert(VMOperation.isInProgressAtSafepoint());
         return nativeBuffer.get(thread);
     }
 
-    @Uninterruptible(reason = "Called by uninterruptible code.", callerMustBe = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static void notifyEventWriter(IsolateThread thread) {
         if (javaEventWriter.get(thread) != null) {
             javaEventWriter.get(thread).notified = true;
