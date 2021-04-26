@@ -152,9 +152,8 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     /**
      * We are writing all the in-memory data to the file. However, even though we are at a
      * safepoint, further JFR events can still be triggered by the current thread at any time. This
-     * includes allocation and GC events. Therefore, it is necessary that our whole JFR
-     * infrastructure is epoch-based. So, we can uninterruptibly switch to a new epoch before we
-     * start writing out the data of the old epoch.
+     * includes allocation and GC events. Therefore, it is necessary that we switch
+     * to a new epoch in an uninterruptible safepoint
      */
     // TODO: add more logic to all JfrRepositories so that it is possible to switch the epoch. The
     // global JFR memory must also support different epochs.
@@ -163,6 +162,8 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         JfrCloseFileOperation op = new JfrCloseFileOperation();
         op.enqueue();
 
+        // JfrCloseFileOperation will switch to a new epoch so data for the old epoch will not
+        // be modified by other threads and can be written without a safepoint
         try {
             SignedWord constantPoolPosition = writeCheckpointEvent(repositories);
             SignedWord metadataPosition = writeMetadataEvent(metadataDescriptor);
@@ -204,11 +205,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     private SignedWord writeCheckpointEvent(JfrRepository[] repositories) throws IOException {
         JfrSerializer[] serializers = JfrSerializerSupport.get().getSerializers();
-
-        // TODO: Write the global buffers of the previous epoch to disk. Assert that none of the
-        // buffers from the previous epoch is acquired (all operations on the buffers must have
-        // finished before the safepoint).
-
         SignedWord start = beginEvent();
         writeCompressedLong(JfrEvents.CheckpointEvent.getId());
         writeCompressedLong(JfrTicks.elapsedTicks());
@@ -265,7 +261,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     public boolean shouldRotateDisk() {
         assert lock.isHeldByCurrentThread();
-        return filename != null && getFileSupport().size(fd).rawValue() > notificationThreshold;
+        return filename != null && getFileSupport().size(fd).greaterThan(WordFactory.signed(notificationThreshold));
     }
 
     public SignedWord beginEvent() throws IOException {
