@@ -274,9 +274,9 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     public void endEvent(SignedWord start) throws IOException {
         SignedWord end = getFileSupport().position(fd);
-        long writtenBytes = end.rawValue() - start.rawValue();
+        SignedWord writtenBytes = end.subtract(start);
         getFileSupport().seek(fd, start);
-        getFileSupport().writeInt(fd, makePaddedInt(writtenBytes));
+        getFileSupport().writeInt(fd, makePaddedInt(writtenBytes.rawValue()));
         getFileSupport().seek(fd, end);
     }
 
