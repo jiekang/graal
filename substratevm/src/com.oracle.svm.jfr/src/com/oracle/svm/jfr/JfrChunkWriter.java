@@ -134,7 +134,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
     }
 
-    @Uninterruptible(reason = "Called by uninterruptible code", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code", mayBeInlined = true)
     public boolean write(JfrBuffer buffer) {
         assert (JfrBufferAccess.isAcquired(buffer) || VMOperation.isInProgressAtSafepoint());
         UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(buffer);

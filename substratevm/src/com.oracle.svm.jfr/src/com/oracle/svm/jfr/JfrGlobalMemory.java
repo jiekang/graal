@@ -73,13 +73,13 @@ public class JfrGlobalMemory {
         }
     }
 
-    @Uninterruptible(reason = "May be called by uninterruptible code", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public JfrBuffers getBuffers() {
         assert buffers.isNonNull();
         return buffers;
     }
 
-    @Uninterruptible(reason = "May be called by uninterruptible code", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public long getBufferCount() {
         return bufferCount;
     }
