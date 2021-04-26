@@ -33,6 +33,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 import com.oracle.svm.core.thread.VMOperation;
+import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
@@ -72,7 +73,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     private long notificationThreshold;
 
     private String filename;
-    private RawFileOperationSupport fileOperationSupport;
     private RawFileOperationSupport.RawFileDescriptor fd;
     private long chunkStartTicks;
     private long chunkStartNanos;
@@ -86,7 +86,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     @Override
     public void initialize(long maxChunkSize) {
-        this.fileOperationSupport = RawFileOperationSupport.bigEndian();
         this.notificationThreshold = maxChunkSize;
     }
 
@@ -124,7 +123,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         chunkStartTicks = JfrTicks.elapsedTicks();
         try {
             filename = outputFile;
-            fd = fileOperationSupport.open(filename, RawFileOperationSupport.FileAccessMode.READ_WRITE);
+            fd = getFileSupport().open(filename, RawFileOperationSupport.FileAccessMode.READ_WRITE);
             writeFileHeader();
             // TODO: this should probably also write all live threads
             return true;
@@ -141,12 +140,12 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             return false;
         }
 
-        boolean success = fileOperationSupport.write(fd, JfrBufferAccess.getDataStart(buffer), unflushedSize);
+        boolean success = getFileSupport().write(fd, JfrBufferAccess.getDataStart(buffer), unflushedSize);
         if (!success) {
             return false;
         }
         JfrBufferAccess.increaseTop(buffer, unflushedSize);
-        return fileOperationSupport.position(fd).rawValue() > notificationThreshold;
+        return getFileSupport().position(fd).rawValue() > notificationThreshold;
     }
 
     @Uninterruptible(reason = "Called by uninterruptible code")
@@ -157,12 +156,12 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             return false;
         }
 
-        boolean success = fileOperationSupport.write(fd, JfrBufferAccess.getDataStart(buffer), unflushedSize);
+        boolean success = getFileSupport().write(fd, JfrBufferAccess.getDataStart(buffer), unflushedSize);
         if (!success) {
             return false;
         }
         JfrBufferAccess.increaseTop(buffer, unflushedSize);
-        return fileOperationSupport.position(fd).rawValue() > notificationThreshold;
+        return getFileSupport().position(fd).rawValue() > notificationThreshold;
     }
 
     /**
@@ -183,7 +182,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             SignedWord constantPoolPosition = writeCheckpointEvent(repositories);
             SignedWord metadataPosition = writeMetadataEvent(metadataDescriptor);
             patchFileHeader(constantPoolPosition, metadataPosition);
-            fileOperationSupport.close(fd);
+            getFileSupport().close(fd);
         } catch (IOException e) {
             Logger.log(JFR_SYSTEM, ERROR, "Error while writing file " + filename + ": " + e.getMessage());
         }
@@ -193,29 +192,29 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     private void writeFileHeader() throws IOException {
         // Write the header - some of the data gets patched later on.
-        fileOperationSupport.write(fd, FILE_MAGIC);
-        fileOperationSupport.writeShort(fd, JFR_VERSION_MAJOR);
-        fileOperationSupport.writeShort(fd, JFR_VERSION_MINOR);
-        assert fileOperationSupport.position(fd).equal(CHUNK_SIZE_OFFSET);
-        fileOperationSupport.writeLong(fd, 0L); // chunk size
-        fileOperationSupport.writeLong(fd, 0L); // last checkpoint offset
-        fileOperationSupport.writeLong(fd, 0L); // metadata position
-        fileOperationSupport.writeLong(fd, 0L); // startNanos
-        fileOperationSupport.writeLong(fd, 0L); // durationNanos
-        fileOperationSupport.writeLong(fd, chunkStartTicks);
-        fileOperationSupport.writeLong(fd, JfrTicks.getTicksFrequency());
-        fileOperationSupport.writeInt(fd, compressedInts ? 1 : 0);
+        getFileSupport().write(fd, FILE_MAGIC);
+        getFileSupport().writeShort(fd, JFR_VERSION_MAJOR);
+        getFileSupport().writeShort(fd, JFR_VERSION_MINOR);
+        assert getFileSupport().position(fd).equal(CHUNK_SIZE_OFFSET);
+        getFileSupport().writeLong(fd, 0L); // chunk size
+        getFileSupport().writeLong(fd, 0L); // last checkpoint offset
+        getFileSupport().writeLong(fd, 0L); // metadata position
+        getFileSupport().writeLong(fd, 0L); // startNanos
+        getFileSupport().writeLong(fd, 0L); // durationNanos
+        getFileSupport().writeLong(fd, chunkStartTicks);
+        getFileSupport().writeLong(fd, JfrTicks.getTicksFrequency());
+        getFileSupport().writeInt(fd, compressedInts ? 1 : 0);
     }
 
     public void patchFileHeader(SignedWord constantPoolPosition, SignedWord metadataPosition) throws IOException {
-        long chunkSize = fileOperationSupport.position(fd).rawValue();
+        long chunkSize = getFileSupport().position(fd).rawValue();
         long durationNanos = JfrTicks.currentTimeNanos() - chunkStartNanos;
-        fileOperationSupport.seek(fd, WordFactory.signed(CHUNK_SIZE_OFFSET));
-        fileOperationSupport.writeLong(fd, chunkSize);
-        fileOperationSupport.writeLong(fd, constantPoolPosition.rawValue());
-        fileOperationSupport.writeLong(fd, metadataPosition.rawValue());
-        fileOperationSupport.writeLong(fd, chunkStartNanos);
-        fileOperationSupport.writeLong(fd, durationNanos);
+        getFileSupport().seek(fd, WordFactory.signed(CHUNK_SIZE_OFFSET));
+        getFileSupport().writeLong(fd, chunkSize);
+        getFileSupport().writeLong(fd, constantPoolPosition.rawValue());
+        getFileSupport().writeLong(fd, metadataPosition.rawValue());
+        getFileSupport().writeLong(fd, chunkStartNanos);
+        getFileSupport().writeLong(fd, durationNanos);
     }
 
     private SignedWord writeCheckpointEvent(JfrRepository[] repositories) throws IOException {
@@ -281,23 +280,23 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     public boolean shouldRotateDisk() {
         assert lock.isHeldByCurrentThread();
-        return filename != null && fileOperationSupport.size(fd).rawValue() > notificationThreshold;
+        return filename != null && getFileSupport().size(fd).rawValue() > notificationThreshold;
     }
 
     public SignedWord beginEvent() throws IOException {
-        SignedWord start = fileOperationSupport.position(fd);
+        SignedWord start = getFileSupport().position(fd);
         // Write a placeholder for the size. Will be patched by endEvent,
-        fileOperationSupport.writeInt(fd, 0);
+        getFileSupport().writeInt(fd, 0);
         return start;
     }
 
 
     public void endEvent(SignedWord start) throws IOException {
-        SignedWord end = fileOperationSupport.position(fd);
+        SignedWord end = getFileSupport().position(fd);
         long writtenBytes = end.rawValue() - start.rawValue();
-        fileOperationSupport.seek(fd, start);
-        fileOperationSupport.writeInt(fd, makePaddedInt(writtenBytes));
-        fileOperationSupport.seek(fd, end);
+        getFileSupport().seek(fd, start);
+        getFileSupport().writeInt(fd, makePaddedInt(writtenBytes));
+        getFileSupport().seek(fd, end);
     }
 
     public void writeBoolean(boolean value) throws IOException {
@@ -307,12 +306,12 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     public void writeByte(byte value) throws IOException {
         assert lock.isHeldByCurrentThread() || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
-        fileOperationSupport.writeByte(fd, value);
+        getFileSupport().writeByte(fd, value);
     }
 
     public void writeBytes(byte[] values) throws IOException {
         assert lock.isHeldByCurrentThread() || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
-        fileOperationSupport.write(fd, values);
+        getFileSupport().write(fd, values);
     }
 
     public void writeCompressedInt(int value) throws IOException {
@@ -324,62 +323,67 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         assert lock.isHeldByCurrentThread() || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
         long v = value;
         if ((v & ~0x7FL) == 0L) {
-            fileOperationSupport.writeByte(fd, (byte) v); // 0-6
+            getFileSupport().writeByte(fd, (byte) v); // 0-6
             return;
         }
-        fileOperationSupport.writeByte(fd, (byte) (v | 0x80L)); // 0-6
+        getFileSupport().writeByte(fd, (byte) (v | 0x80L)); // 0-6
         v >>>= 7;
         if ((v & ~0x7FL) == 0L) {
-            fileOperationSupport.writeByte(fd, (byte) v); // 7-13
+            getFileSupport().writeByte(fd, (byte) v); // 7-13
             return;
         }
-        fileOperationSupport.writeByte(fd, (byte) (v | 0x80L)); // 7-13
+        getFileSupport().writeByte(fd, (byte) (v | 0x80L)); // 7-13
         v >>>= 7;
         if ((v & ~0x7FL) == 0L) {
-            fileOperationSupport.writeByte(fd, (byte) v); // 14-20
+            getFileSupport().writeByte(fd, (byte) v); // 14-20
             return;
         }
-        fileOperationSupport.writeByte(fd, (byte) (v | 0x80L)); // 14-20
+        getFileSupport().writeByte(fd, (byte) (v | 0x80L)); // 14-20
         v >>>= 7;
         if ((v & ~0x7FL) == 0L) {
-            fileOperationSupport.writeByte(fd, (byte) v); // 21-27
+            getFileSupport().writeByte(fd, (byte) v); // 21-27
             return;
         }
-        fileOperationSupport.writeByte(fd, (byte) (v | 0x80L)); // 21-27
+        getFileSupport().writeByte(fd, (byte) (v | 0x80L)); // 21-27
         v >>>= 7;
         if ((v & ~0x7FL) == 0L) {
-            fileOperationSupport.writeByte(fd, (byte) v); // 28-34
+            getFileSupport().writeByte(fd, (byte) v); // 28-34
             return;
         }
-        fileOperationSupport.writeByte(fd, (byte) (v | 0x80L)); // 28-34
+        getFileSupport().writeByte(fd, (byte) (v | 0x80L)); // 28-34
         v >>>= 7;
         if ((v & ~0x7FL) == 0L) {
-            fileOperationSupport.writeByte(fd, (byte) v); // 35-41
+            getFileSupport().writeByte(fd, (byte) v); // 35-41
             return;
         }
-        fileOperationSupport.writeByte(fd, (byte) (v | 0x80L)); // 35-41
+        getFileSupport().writeByte(fd, (byte) (v | 0x80L)); // 35-41
         v >>>= 7;
         if ((v & ~0x7FL) == 0L) {
-            fileOperationSupport.writeByte(fd, (byte) v); // 42-48
+            getFileSupport().writeByte(fd, (byte) v); // 42-48
             return;
         }
-        fileOperationSupport.writeByte(fd, (byte) (v | 0x80L)); // 42-48
+        getFileSupport().writeByte(fd, (byte) (v | 0x80L)); // 42-48
         v >>>= 7;
 
         if ((v & ~0x7FL) == 0L) {
-            fileOperationSupport.writeByte(fd, (byte) v); // 49-55
+            getFileSupport().writeByte(fd, (byte) v); // 49-55
             return;
         }
-        fileOperationSupport.writeByte(fd, (byte) (v | 0x80L)); // 49-55
-        fileOperationSupport.writeByte(fd, (byte) (v >>> 7)); // 56-63, last byte as is.
+        getFileSupport().writeByte(fd, (byte) (v | 0x80L)); // 49-55
+        getFileSupport().writeByte(fd, (byte) (v >>> 7)); // 56-63, last byte as is.
     }
 
     public void close() throws IOException {
         try {
-            fileOperationSupport.close(fd);
+            getFileSupport().close(fd);
         } finally {
             filename = null;
         }
+    }
+
+    @Fold
+    static RawFileOperationSupport getFileSupport() {
+        return RawFileOperationSupport.bigEndian();
     }
 
     public enum StringEncoding {
@@ -398,12 +402,12 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     public void writeString(String str) throws IOException {
         // TODO: Implement writing strings in the other encodings
         if (str.isEmpty()) {
-            fileOperationSupport.writeByte(fd, StringEncoding.EMPTY_STRING.byteValue);
+            getFileSupport().writeByte(fd, StringEncoding.EMPTY_STRING.byteValue);
         } else {
-            fileOperationSupport.writeByte(fd, StringEncoding.UTF8_BYTE_ARRAY.byteValue);
+            getFileSupport().writeByte(fd, StringEncoding.UTF8_BYTE_ARRAY.byteValue);
             byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
             writeCompressedInt(bytes.length);
-            fileOperationSupport.write(fd, bytes);
+            getFileSupport().write(fd, bytes);
         }
     }
 
