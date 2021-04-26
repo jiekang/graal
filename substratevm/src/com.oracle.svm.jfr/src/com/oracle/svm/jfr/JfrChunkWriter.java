@@ -133,24 +133,9 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
     }
 
+
+    @Uninterruptible(reason = "Called by uninterruptible code", mayBeInlined = true)
     public boolean write(JfrBuffer buffer) {
-        assert lock.isHeldByCurrentThread()  || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
-        UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(buffer);
-        if (unflushedSize.equal(0)) {
-            return false;
-        }
-
-        boolean success = getFileSupport().write(fd, JfrBufferAccess.getDataStart(buffer), unflushedSize);
-        if (!success) {
-            return false;
-        }
-        JfrBufferAccess.increaseTop(buffer, unflushedSize);
-        return getFileSupport().position(fd).rawValue() > notificationThreshold;
-    }
-
-    @Uninterruptible(reason = "Called by uninterruptible code")
-    public boolean writeAtSafepoint(JfrBuffer buffer) {
-        assert VMOperation.isInProgressAtSafepoint();
         UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(buffer);
         if (unflushedSize.equal(0)) {
             return false;
@@ -449,12 +434,12 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             for (IsolateThread thread = VMThreads.firstThread(); thread.isNonNull(); thread = VMThreads.nextThread(thread)) {
                 JfrBuffer b = JfrThreadLocal.getJavaBuffer(thread);
                 if (b.isNonNull()) {
-                    writeAtSafepoint(b);
+                    write(b);
                     JfrThreadLocal.notifyEventWriter(thread);
                 }
                 b = JfrThreadLocal.getNativeBuffer(thread);
                 if (b.isNonNull()) {
-                    writeAtSafepoint(b);
+                    write(b);
                 }
             }
 
@@ -462,7 +447,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             for (int i = 0; i < globalMemory.getBufferCount(); i++) {
                 JfrBuffer buffer = buffers.addressOf(i).read();
                 if (JfrBufferAccess.acquire(buffer)) {
-                    if (writeAtSafepoint(buffer) && !shouldNotify) {
+                    if (write(buffer) && !shouldNotify) {
                         shouldNotify = true;
                     }
                     JfrBufferAccess.reinitialize(buffer);
