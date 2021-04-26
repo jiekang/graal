@@ -428,14 +428,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
          */
         @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
         private boolean changeEpoch() {
-            // TODO: We need to ensure that all JFR events that are triggered by the current thread
-            // are recorded for the next epoch. Otherwise, those JFR events could pollute the data
-            // that we currently try to persist. To ensure that, we must execute the following steps
-            // uninterruptibly:
-            //
-            // - Flush all buffers (native, Java and global) to disk
-            // - Set all Java EventWriter.notified values
-            // - Change the epoch
             boolean shouldNotify = false;
             for (IsolateThread thread = VMThreads.firstThread(); thread.isNonNull(); thread = VMThreads.nextThread(thread)) {
                 JfrBuffer b = JfrThreadLocal.getJavaBuffer(thread);
