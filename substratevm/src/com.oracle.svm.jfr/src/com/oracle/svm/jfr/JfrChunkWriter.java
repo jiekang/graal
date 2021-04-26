@@ -354,14 +354,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         getFileSupport().writeByte(fd, (byte) (v >>> 7)); // 56-63, last byte as is.
     }
 
-    public void close() throws IOException {
-        try {
-            getFileSupport().close(fd);
-        } finally {
-            filename = null;
-        }
-    }
-
     @Fold
     static RawFileOperationSupport getFileSupport() {
         return RawFileOperationSupport.bigEndian();
