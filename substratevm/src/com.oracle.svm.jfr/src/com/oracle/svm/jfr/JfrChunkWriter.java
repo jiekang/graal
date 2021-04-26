@@ -76,6 +76,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     private RawFileOperationSupport.RawFileDescriptor fd;
     private long chunkStartTicks;
     private long chunkStartNanos;
+    private boolean shouldNotify = false;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public JfrChunkWriter(JfrGlobalMemory globalMemory) {
@@ -174,6 +175,14 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
 
         filename = null;
+        if (shouldNotify) {
+            shouldNotify = false;
+            //Checkstyle: stop
+            synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
+                Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
+            }
+            //Checkstyle: resume
+        }
     }
 
     private void writeFileHeader() throws IOException {
@@ -398,14 +407,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
         @Override
         protected void operate() {
-            boolean shouldNotify = changeEpoch();
-            if (shouldNotify) {
-                //Checkstyle: stop
-                synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
-                    Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
-                }
-                //Checkstyle: resume
-            }
+            changeEpoch();
         }
 
         /**
@@ -419,8 +421,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
          * @return Whether to notify of file changes
          */
         @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
-        private boolean changeEpoch() {
-            boolean shouldNotify = false;
+        private void changeEpoch() {
             for (IsolateThread thread = VMThreads.firstThread(); thread.isNonNull(); thread = VMThreads.nextThread(thread)) {
                 JfrBuffer b = JfrThreadLocal.getJavaBuffer(thread);
                 if (b.isNonNull()) {
@@ -443,7 +444,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
                 JfrBufferAccess.reinitialize(buffer);
             }
             JfrTraceIdEpoch.getInstance().changeEpoch();
-            return shouldNotify;
         }
     }
 }
