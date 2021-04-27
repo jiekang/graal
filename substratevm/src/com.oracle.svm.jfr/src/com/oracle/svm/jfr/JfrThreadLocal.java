@@ -244,6 +244,8 @@ public class JfrThreadLocal implements ThreadListener {
                 writeDataLoss(threadLocalBuffer, unflushedSize);
                 return WordFactory.nullPointer();
             }
+        } else {
+            JfrBufferAccess.reinitialize(threadLocalBuffer);
         }
 
         assert JfrBufferAccess.getUnflushedSize(threadLocalBuffer).equal(0);
