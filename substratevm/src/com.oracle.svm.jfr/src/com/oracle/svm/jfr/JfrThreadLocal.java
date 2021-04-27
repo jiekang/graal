@@ -233,21 +233,18 @@ public class JfrThreadLocal implements ThreadListener {
         UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(threadLocalBuffer);
         if (unflushedSize.aboveThan(0)) {
             JfrGlobalMemory globalMemory = SubstrateJVM.getGlobalMemory();
-            if (globalMemory.write(threadLocalBuffer, unflushedSize)) {
-                // Copy all uncommitted memory to the start of the thread local buffer.
-                if (uncommitted.aboveThan(0)) {
-                    UnmanagedMemoryUtil.copy(threadLocalBuffer.getPos(), JfrBufferAccess.getDataStart(threadLocalBuffer), uncommitted);
-                }
-                JfrBufferAccess.reinitialize(threadLocalBuffer);
-            } else {
+            if (!globalMemory.write(threadLocalBuffer, unflushedSize)) {
                 JfrBufferAccess.reinitialize(threadLocalBuffer);
                 writeDataLoss(threadLocalBuffer, unflushedSize);
                 return WordFactory.nullPointer();
             }
-        } else {
-            JfrBufferAccess.reinitialize(threadLocalBuffer);
         }
 
+        if (uncommitted.aboveThan(0)) {
+            // Copy all uncommitted memory to the start of the thread local buffer.
+            UnmanagedMemoryUtil.copy(threadLocalBuffer.getPos(), JfrBufferAccess.getDataStart(threadLocalBuffer), uncommitted);
+        }
+        JfrBufferAccess.reinitialize(threadLocalBuffer);
         assert JfrBufferAccess.getUnflushedSize(threadLocalBuffer).equal(0);
         if (result.getSize().aboveOrEqual(uncommitted.add(requested))) {
             return result;
