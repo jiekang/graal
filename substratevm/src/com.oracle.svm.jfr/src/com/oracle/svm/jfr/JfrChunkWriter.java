@@ -142,7 +142,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             return false;
         }
 
-        boolean success = getFileSupport().write(fd, JfrBufferAccess.getDataStart(buffer), unflushedSize);
+        boolean success = getFileSupport().write(fd, buffer.getTop(), unflushedSize);
         if (!success) {
             return false;
         }
@@ -423,14 +423,14 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
         private void changeEpoch() {
             for (IsolateThread thread = VMThreads.firstThread(); thread.isNonNull(); thread = VMThreads.nextThread(thread)) {
-                JfrBuffer b = JfrThreadLocal.getJavaBuffer(thread);
-                if (b.isNonNull()) {
-                    write(b);
+                JfrBuffer buffer = JfrThreadLocal.getJavaBuffer(thread);
+                if (buffer.isNonNull()) {
+                    write(buffer);
                     JfrThreadLocal.notifyEventWriter(thread);
                 }
-                b = JfrThreadLocal.getNativeBuffer(thread);
-                if (b.isNonNull()) {
-                    write(b);
+                buffer = JfrThreadLocal.getNativeBuffer(thread);
+                if (buffer.isNonNull()) {
+                    write(buffer);
                 }
             }
 
