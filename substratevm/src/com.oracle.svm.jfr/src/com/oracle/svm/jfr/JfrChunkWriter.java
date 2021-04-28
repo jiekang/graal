@@ -174,6 +174,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
 
         filename = null;
+        fd = WordFactory.nullPointer();
     }
 
     private void writeFileHeader() throws IOException {
