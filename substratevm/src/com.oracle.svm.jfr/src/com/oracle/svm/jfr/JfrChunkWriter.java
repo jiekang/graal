@@ -154,7 +154,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
      * We are writing all the in-memory data to the file. However, even though we are at a
      * safepoint, further JFR events can still be triggered by the current thread at any time. This
      * includes allocation and GC events. Therefore, it is necessary that we switch
-     * to a new epoch in an uninterruptible safepoint
+     * to a new epoch in uninterruptible code at a safepoint.
      */
     // TODO: add more logic to all JfrRepositories so that it is possible to switch the epoch. The
     // global JFR memory must also support different epochs.
