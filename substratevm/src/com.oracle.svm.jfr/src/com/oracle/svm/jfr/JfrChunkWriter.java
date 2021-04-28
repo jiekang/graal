@@ -76,7 +76,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     private RawFileOperationSupport.RawFileDescriptor fd;
     private long chunkStartTicks;
     private long chunkStartNanos;
-    private boolean shouldNotify = false;
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public JfrChunkWriter(JfrGlobalMemory globalMemory) {
@@ -175,14 +174,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
 
         filename = null;
-        if (shouldNotify) {
-            shouldNotify = false;
-            //Checkstyle: stop
-            synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
-                Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
-            }
-            //Checkstyle: resume
-        }
     }
 
     private void writeFileHeader() throws IOException {
@@ -438,9 +429,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
             for (int i = 0; i < globalMemory.getBufferCount(); i++) {
                 JfrBuffer buffer = buffers.addressOf(i).read();
                 assert !JfrBufferAccess.isAcquired(buffer);
-                if (write(buffer) && !shouldNotify) {
-                    shouldNotify = true;
-                }
+                write(buffer);
                 JfrBufferAccess.reinitialize(buffer);
             }
             JfrTraceIdEpoch.getInstance().changeEpoch();
