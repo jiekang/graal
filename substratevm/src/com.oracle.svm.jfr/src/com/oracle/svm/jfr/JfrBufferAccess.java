@@ -68,7 +68,7 @@ public final class JfrBufferAccess {
         ImageSingletons.lookup(UnmanagedMemorySupport.class).free(buffer);
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.")
     public static void reinitialize(JfrBuffer buffer) {
         Pointer pos = getDataStart(buffer);
         buffer.setPos(pos);
@@ -112,7 +112,7 @@ public final class JfrBufferAccess {
         return getDataEnd(buffer).subtract(buffer.getPos());
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.")
     public static UnsignedWord getUnflushedSize(JfrBuffer buffer) {
         return buffer.getPos().subtract(buffer.getTop());
     }
@@ -122,7 +122,7 @@ public final class JfrBufferAccess {
         buffer.setPos(buffer.getPos().add(delta));
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.")
     public static void increaseTop(JfrBuffer buffer, UnsignedWord delta) {
         buffer.setTop(buffer.getTop().add(delta));
     }
