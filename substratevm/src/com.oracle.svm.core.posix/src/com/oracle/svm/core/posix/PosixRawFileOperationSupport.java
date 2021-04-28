@@ -69,6 +69,7 @@ public class PosixRawFileOperationSupport extends AbstractRawFileOperationSuppor
     @Override
     public boolean isValid(RawFileDescriptor fd) {
         int posixFd = getPosixFileDescriptor(fd);
+        // > 0 to ensure the default value 0 is invalid on all platforms
         return posixFd > 0;
     }
 
