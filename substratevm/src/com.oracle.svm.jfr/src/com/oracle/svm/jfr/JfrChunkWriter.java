@@ -262,7 +262,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     public boolean shouldRotateDisk() {
         assert lock.isHeldByCurrentThread();
-        return filename != null && getFileSupport().size(fd).greaterThan(WordFactory.signed(notificationThreshold));
+        return getFileSupport().isValid(fd) && getFileSupport().size(fd).greaterThan(WordFactory.signed(notificationThreshold));
     }
 
     public SignedWord beginEvent() throws IOException {
@@ -410,10 +410,11 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
          * - Flush all buffers (native, Java and global) to disk
          * - Set all Java EventWriter.notified values
          * - Change the epoch
-         * @return Whether to notify of file changes
          */
         @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
         private void changeEpoch() {
+            // Write unflushed data from the thread local buffers but do *not* reinitialize them
+            // The thread local code will handle space reclamation on their own time
             for (IsolateThread thread = VMThreads.firstThread(); thread.isNonNull(); thread = VMThreads.nextThread(thread)) {
                 JfrBuffer buffer = JfrThreadLocal.getJavaBuffer(thread);
                 if (buffer.isNonNull()) {

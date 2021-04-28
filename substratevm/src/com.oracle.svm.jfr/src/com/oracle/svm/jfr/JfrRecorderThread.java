@@ -96,20 +96,22 @@ public class JfrRecorderThread extends Thread {
         JfrBuffers buffers = globalMemory.getBuffers();
         for (int i = 0; i < globalMemory.getBufferCount(); i++) {
             JfrBuffer buffer = buffers.addressOf(i).read();
-            boolean shouldNotify = persistBuffer(chunkWriter, buffer);
-            if (shouldNotify) {
-                //Checkstyle: stop
-                synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
-                    Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
+            if (isFullEnough(buffer)) {
+                boolean shouldNotify = persistBuffer(chunkWriter, buffer);
+                if (shouldNotify) {
+                    //Checkstyle: stop
+                    synchronized (Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE) {
+                        Target_jdk_jfr_internal_JVM.FILE_DELTA_CHANGE.notifyAll();
+                    }
+                    //Checkstyle: resume
                 }
-                //Checkstyle: resume
             }
         }
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
     private boolean persistBuffer(JfrChunkWriter chunkWriter, JfrBuffer buffer) {
-        if (isFullEnough(buffer) && JfrBufferAccess.acquire(buffer)) {
+        if (JfrBufferAccess.acquire(buffer)) {
             boolean shouldNotify = chunkWriter.write(buffer);
             JfrBufferAccess.reinitialize(buffer);
             JfrBufferAccess.release(buffer);
