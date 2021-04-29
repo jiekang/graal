@@ -142,10 +142,13 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
 
         boolean success = getFileSupport().write(fd, buffer.getTop(), unflushedSize);
+        JfrBufferAccess.increaseTop(buffer, unflushedSize);
         if (!success) {
+            // TODO Write failed, but data can be for a specific epoch
+            // At the moment, that data is lost. Error handling needs
+            // to be investigated
             return false;
         }
-        JfrBufferAccess.increaseTop(buffer, unflushedSize);
         return getFileSupport().position(fd).greaterThan(WordFactory.signed(notificationThreshold));
     }
 
