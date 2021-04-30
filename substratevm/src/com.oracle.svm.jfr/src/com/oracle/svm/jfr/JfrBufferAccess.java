@@ -80,12 +80,12 @@ public final class JfrBufferAccess {
         return buffer.getAcquired() == ACQUIRED;
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", callerMustBe = true)
     public static boolean acquire(JfrBuffer buffer) {
         return ((Pointer) buffer).logicCompareAndSwapInt(JfrBuffer.offsetOfAcquired(), NOT_ACQUIRED, ACQUIRED, NamedLocationIdentity.OFF_HEAP_LOCATION);
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    @Uninterruptible(reason = "Called from uninterruptible code.", callerMustBe = true)
     public static void release(JfrBuffer buffer) {
         // TODO: check which location identity is used for accessing - must match the one above
         assert buffer.getAcquired() == ACQUIRED;

@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.locks.ReentrantLock;
 
 
+import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.thread.VMOperation;
 import org.graalvm.compiler.api.replacements.Fold;
 import org.graalvm.compiler.core.common.NumUtil;
