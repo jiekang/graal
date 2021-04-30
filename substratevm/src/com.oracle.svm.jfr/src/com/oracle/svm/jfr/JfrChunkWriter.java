@@ -134,7 +134,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code")
+    @Uninterruptible(reason = "Prevent safepoints as those could change the top pointer.")
     public boolean write(JfrBuffer buffer) {
         assert (JfrBufferAccess.isAcquired(buffer) || VMOperation.isInProgressAtSafepoint());
         UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(buffer);
