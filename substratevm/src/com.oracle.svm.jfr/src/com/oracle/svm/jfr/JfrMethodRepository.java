@@ -77,7 +77,6 @@ public class JfrMethodRepository implements JfrRepository {
 
     @Override
     public int write(JfrChunkWriter writer) throws IOException {
-        assert VMOperation.isInProgressAtSafepoint();
         if (count == 0) {
             return 0;
         }

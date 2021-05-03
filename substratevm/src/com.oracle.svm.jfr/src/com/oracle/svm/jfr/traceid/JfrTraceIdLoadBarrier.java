@@ -71,12 +71,7 @@ public class JfrTraceIdLoadBarrier {
         }
     }
 
-<<<<<<< HEAD
     public static long classCount(boolean epoch) {
-=======
-    public static int classCount(boolean epoch) {
-        assert VMOperation.isInProgressAtSafepoint();
->>>>>>> origin/jfr
         return epoch ? classCount1.get() : classCount0.get();
     }
 

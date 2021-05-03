@@ -141,8 +141,6 @@ public class JfrTypeRepository implements JfrRepository {
 
     @Override
     public int write(JfrChunkWriter writer) throws IOException {
-        assert VMOperation.isInProgressAtSafepoint();
-
         // Visit all used classes, and collect their packages, modules, classloaders and possibly referenced
         // classes.
         TypeInfo typeInfo = new TypeInfo();
@@ -227,7 +225,6 @@ public class JfrTypeRepository implements JfrRepository {
     }
 
     private int writeModules(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
-        assert VMOperation.isInProgressAtSafepoint();
         Map<Module, Long> modules = typeInfo.getModules();
         if (modules.isEmpty()) {
             return 0;
@@ -251,7 +248,6 @@ public class JfrTypeRepository implements JfrRepository {
     }
 
     private int writeClassLoaders(JfrChunkWriter writer, TypeInfo typeInfo) throws IOException {
-        assert VMOperation.isInProgressAtSafepoint();
         Map<ClassLoader, Long> classLoaders = typeInfo.getClassLoaders();
         if (classLoaders.isEmpty()) {
             return 0;

@@ -56,8 +56,6 @@ public class JfrStringRepository implements JfrRepository {
 
     @Override
     public int write(JfrChunkWriter writer) throws IOException {
-        assert VMOperation.isInProgressAtSafepoint();
-
         return 0;
 
         // writer.writeCompressedLong(JfrTypes.String.getId());
