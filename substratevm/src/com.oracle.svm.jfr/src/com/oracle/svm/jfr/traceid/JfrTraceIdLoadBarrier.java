@@ -71,7 +71,7 @@ public class JfrTraceIdLoadBarrier {
         }
     }
 
-    public static long classCount(boolean epoch) {
+    public static int classCount(boolean epoch) {
         return epoch ? classCount1.get() : classCount0.get();
     }
 
