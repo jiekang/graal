@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2021, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,13 +23,22 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.svm.jfr;
+
+package com.oracle.svm.jfrtest;
 
 import java.io.IOException;
 
+import jdk.jfr.Recording;
+
 /**
- * Used to write static data at a JFR checkpoint.
+ * Utility class to handle recording.
  */
-public interface JfrSerializer {
-    int write(JfrChunkWriter writer) throws IOException;
+public interface JFR {
+    Recording startRecording(String recordingName) throws Exception;
+
+    Recording startRecording(String recordingName, String configName) throws Exception;
+
+    void endRecording(Recording recording) throws Exception;
+
+    void cleanupRecording(Recording recording) throws IOException;
 }

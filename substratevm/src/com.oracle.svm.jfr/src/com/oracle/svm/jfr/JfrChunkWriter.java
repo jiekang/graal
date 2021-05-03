@@ -31,10 +31,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.locks.ReentrantLock;
 
+<<<<<<< HEAD
 
 import com.oracle.svm.core.log.Log;
 import com.oracle.svm.core.thread.VMOperation;
 import org.graalvm.compiler.api.replacements.Fold;
+=======
+import com.oracle.svm.core.thread.VMOperationControl;
+import com.oracle.svm.jfr.traceid.JfrTraceIdEpoch;
+>>>>>>> origin/jfr
 import org.graalvm.compiler.core.common.NumUtil;
 import org.graalvm.nativeimage.IsolateThread;
 import org.graalvm.nativeimage.Platform;
@@ -67,7 +72,12 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     private static final short JFR_VERSION_MINOR = 0;
     private static final int CHUNK_SIZE_OFFSET = 8;
 
+<<<<<<< HEAD
     private final JfrGlobalMemory globalMemory;
+=======
+    private static final long METADATA_TYPE_ID = 0;
+    private static final long CONSTANT_POOL_TYPE_ID = 1;
+>>>>>>> origin/jfr
 
     private final ReentrantLock lock;
     private final boolean compressedInts;
@@ -210,6 +220,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
     private SignedWord writeCheckpointEvent(JfrRepository[] repositories) throws IOException {
         JfrSerializer[] serializers = JfrSerializerSupport.get().getSerializers();
+<<<<<<< HEAD
         SignedWord start = beginEvent();
         writeCompressedLong(JfrEvents.CheckpointEvent.getId());
         writeCompressedLong(JfrTicks.elapsedTicks());
@@ -232,30 +243,59 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         writeCompressedInt(count); // pools size
         writeSerializers(serializers);
         writeRepositories(repositories);
+=======
+
+        // TODO: Write the global buffers of the previous epoch to disk. Assert that none of the
+        // buffers from the previous epoch is acquired (all operations on the buffers must have
+        // finished before the safepoint).
+
+        long start = beginEvent();
+        writeCompressedLong(CONSTANT_POOL_TYPE_ID);
+        writeCompressedLong(JfrTicks.elapsedTicks());
+        writeCompressedLong(0); // duration
+        writeCompressedLong(0); // deltaToNext
+        file.writeBoolean(true); // flush
+        long poolCountPos = file.getFilePointer();
+        file.writeInt(0); // We'll fix this later.
+        // TODO: This should be simplified, serializers and repositories can probably go under the same structure.
+        int poolCount = writeSerializers(serializers);
+        poolCount += writeRepositories(repositories);
+        long currentPos = file.getFilePointer();
+        file.seek(poolCountPos);
+        file.writeInt(makePaddedInt(poolCount));
+        file.seek(currentPos);
+>>>>>>> origin/jfr
         endEvent(start);
 
         return start;
     }
 
-    private void writeSerializers(JfrSerializer[] serializers) throws IOException {
+    private int writeSerializers(JfrSerializer[] serializers) throws IOException {
+        int count = 0;
         for (JfrSerializer serializer : serializers) {
-            if (serializer.hasItems()) {
-                serializer.write(this);
-            }
+            count += serializer.write(this);
         }
+        return count;
     }
 
-    private void writeRepositories(JfrRepository[] constantPools) throws IOException {
+    private int writeRepositories(JfrRepository[] constantPools) throws IOException {
+        int count = 0;
         for (JfrRepository constantPool : constantPools) {
-            if (constantPool.hasItems()) {
-                constantPool.write(this);
-            }
+            int poolCount = constantPool.write(this);
+            count += poolCount;
         }
+        return count;
     }
 
+<<<<<<< HEAD
     private SignedWord writeMetadataEvent(byte[] metadataDescriptor) throws IOException {
         SignedWord start = beginEvent();
         writeCompressedLong(JfrEvents.MetadataEvent.getId());
+=======
+    private long writeMetadataEvent(byte[] metadataDescriptor) throws IOException {
+        long start = beginEvent();
+        writeCompressedLong(METADATA_TYPE_ID);
+>>>>>>> origin/jfr
         writeCompressedLong(JfrTicks.elapsedTicks());
         writeCompressedLong(0); // duration
         writeCompressedLong(0); // metadata id
@@ -417,6 +457,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
          */
         @Uninterruptible(reason = "Prevent pollution of the current thread's thread local JFR buffer.")
         private void changeEpoch() {
+<<<<<<< HEAD
             // Write unflushed data from the thread local buffers but do *not* reinitialize them
             // The thread local code will handle space reclamation on their own time
             for (IsolateThread thread = VMThreads.firstThread(); thread.isNonNull(); thread = VMThreads.nextThread(thread)) {
@@ -438,6 +479,16 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
                 write(buffer);
                 JfrBufferAccess.reinitialize(buffer);
             }
+=======
+            // TODO: We need to ensure that all JFR events that are triggered by the current thread
+            // are recorded for the next epoch. Otherwise, those JFR events could pollute the data
+            // that we currently try to persist. To ensure that, we must execute the following steps
+            // uninterruptibly:
+            //
+            // - Flush all thread-local buffers (native & Java) to global JFR memory.
+            // - Set all Java EventWriter.notified values
+            // - Change the epoch.
+>>>>>>> origin/jfr
             JfrTraceIdEpoch.getInstance().changeEpoch();
         }
     }

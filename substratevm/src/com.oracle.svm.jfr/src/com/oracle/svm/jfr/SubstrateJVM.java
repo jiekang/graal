@@ -77,10 +77,10 @@ class SubstrateJVM {
 
         stringRepo = new JfrStringRepository();
         symbolRepo = new JfrSymbolRepository();
-        typeRepo = new JfrTypeRepository(symbolRepo);
+        typeRepo = new JfrTypeRepository();
         methodRepo = new JfrMethodRepository(typeRepo, symbolRepo);
         stackTraceRepo = new JfrStackTraceRepository(methodRepo);
-        repositories = new JfrRepository[]{stringRepo, symbolRepo, typeRepo, methodRepo, stackTraceRepo};
+        repositories = new JfrRepository[]{stringRepo, typeRepo, symbolRepo, methodRepo, stackTraceRepo};
 
         threadLocal = new JfrThreadLocal();
         globalMemory = new JfrGlobalMemory();
@@ -115,6 +115,11 @@ class SubstrateJVM {
     @Fold
     public static JfrTypeRepository getTypeRepository() {
         return get().typeRepo;
+    }
+
+    @Fold
+    public static JfrSymbolRepository getSymbolRepository() {
+        return get().symbolRepo;
     }
 
     @Fold
@@ -417,7 +422,7 @@ class SubstrateJVM {
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public boolean isEnabled(JfrEvents event) {
-        return eventSettings[event.getId()].isEnabled();
+        return eventSettings[(int) event.getId()].isEnabled();
     }
 
     /** See {@link JVM#setThreshold}. */

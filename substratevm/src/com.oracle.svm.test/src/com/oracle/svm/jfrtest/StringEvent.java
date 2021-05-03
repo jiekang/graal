@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2019, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2021, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,13 +23,18 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package com.oracle.svm.jfr;
 
-import java.io.IOException;
+package com.oracle.svm.jfrtest;
 
-/**
- * Used to write static data at a JFR checkpoint.
- */
-public interface JfrSerializer {
-    int write(JfrChunkWriter writer) throws IOException;
+import jdk.jfr.Description;
+import jdk.jfr.Event;
+import jdk.jfr.Label;
+import jdk.jfr.StackTrace;
+
+@Label("String Event")
+@Description("An event with a string payload")
+@StackTrace(false)
+public class StringEvent extends Event {
+
+    @Label("Message") public String message;
 }
