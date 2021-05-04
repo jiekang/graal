@@ -68,7 +68,7 @@ public final class JfrBufferAccess {
         ImageSingletons.lookup(UnmanagedMemorySupport.class).free(buffer);
     }
 
-    @Uninterruptible(reason = "Prevent safepoints as those could change the top pointer.", callerMustBe = true)
+    @Uninterruptible(reason = "Prevent safepoints as those could change the top pointer.")
     public static void reinitialize(JfrBuffer buffer) {
         Pointer pos = getDataStart(buffer);
         buffer.setPos(pos);
@@ -80,12 +80,12 @@ public final class JfrBufferAccess {
         return buffer.getAcquired() == ACQUIRED;
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", callerMustBe = true)
+    @Uninterruptible(reason = "We must guarantee that all buffers are in unacquired state when entering a safepoint.", callerMustBe = true)
     public static boolean acquire(JfrBuffer buffer) {
         return ((Pointer) buffer).logicCompareAndSwapInt(JfrBuffer.offsetOfAcquired(), NOT_ACQUIRED, ACQUIRED, NamedLocationIdentity.OFF_HEAP_LOCATION);
     }
 
-    @Uninterruptible(reason = "Called from uninterruptible code.", callerMustBe = true)
+    @Uninterruptible(reason = "We must guarantee that all buffers are in unacquired state when entering a safepoint.", callerMustBe = true)
     public static void release(JfrBuffer buffer) {
         // TODO: check which location identity is used for accessing - must match the one above
         assert buffer.getAcquired() == ACQUIRED;
@@ -122,7 +122,7 @@ public final class JfrBufferAccess {
         buffer.setPos(buffer.getPos().add(delta));
     }
 
-    @Uninterruptible(reason = "Prevent safepoints as those could change the top pointer.", callerMustBe = true)
+    @Uninterruptible(reason = "Prevent safepoints as those could change the top pointer.")
     public static void increaseTop(JfrBuffer buffer, UnsignedWord delta) {
         buffer.setTop(buffer.getTop().add(delta));
     }
