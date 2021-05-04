@@ -24,11 +24,9 @@
  */
 package com.oracle.svm.jfr;
 
-import java.io.IOException;
-
 /**
  * Used to write static data at a JFR checkpoint.
  */
 public interface JfrSerializer {
-    int write(JfrChunkWriter writer) throws IOException;
+    int write(JfrChunkWriter writer);
 }

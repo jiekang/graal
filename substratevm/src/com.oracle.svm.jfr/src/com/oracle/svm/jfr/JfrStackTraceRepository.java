@@ -102,7 +102,7 @@ public class JfrStackTraceRepository implements JfrRepository {
     }
 
     @Override
-    public int write(JfrChunkWriter writer) throws IOException {
+    public int write(JfrChunkWriter writer) {
         if (table.getSize() == 0) {
             return 0;
         }

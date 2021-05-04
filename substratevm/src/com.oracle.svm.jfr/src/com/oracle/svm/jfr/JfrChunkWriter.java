@@ -24,10 +24,6 @@
  */
 package com.oracle.svm.jfr;
 
-import static jdk.jfr.internal.LogLevel.ERROR;
-import static jdk.jfr.internal.LogTag.JFR_SYSTEM;
-
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -123,16 +119,11 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         assert lock.isHeldByCurrentThread();
         chunkStartNanos = JfrTicks.currentTimeNanos();
         chunkStartTicks = JfrTicks.elapsedTicks();
-        try {
-            filename = outputFile;
-            fd = getFileSupport().open(filename, RawFileOperationSupport.FileAccessMode.READ_WRITE);
-            writeFileHeader();
-            // TODO: this should probably also write all live threads
-            return true;
-        } catch (IOException e) {
-            Logger.log(JFR_SYSTEM, ERROR, "Error while writing file " + filename + ": " + e.getMessage());
-            return false;
-        }
+        filename = outputFile;
+        fd = getFileSupport().open(filename, RawFileOperationSupport.FileAccessMode.READ_WRITE);
+        writeFileHeader();
+        // TODO: this should probably also write all live threads
+        return true;
     }
 
     @Uninterruptible(reason = "Prevent safepoints as those could change the top pointer.")
@@ -169,20 +160,18 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
 
         // JfrCloseFileOperation will switch to a new epoch so data for the old epoch will not
         // be modified by other threads and can be written without a safepoint
-        try {
-            SignedWord constantPoolPosition = writeCheckpointEvent(repositories);
-            SignedWord metadataPosition = writeMetadataEvent(metadataDescriptor);
-            patchFileHeader(constantPoolPosition, metadataPosition);
-            getFileSupport().close(fd);
-        } catch (IOException e) {
-            Logger.log(JFR_SYSTEM, ERROR, "Error while writing file " + filename + ": " + e.getMessage());
-        }
+
+        SignedWord constantPoolPosition = writeCheckpointEvent(repositories);
+        SignedWord metadataPosition = writeMetadataEvent(metadataDescriptor);
+        patchFileHeader(constantPoolPosition, metadataPosition);
+        getFileSupport().close(fd);
+
 
         filename = null;
         fd = WordFactory.nullPointer();
     }
 
-    private void writeFileHeader() throws IOException {
+    private void writeFileHeader() {
         // Write the header - some of the data gets patched later on.
         getFileSupport().write(fd, FILE_MAGIC);
         getFileSupport().writeShort(fd, JFR_VERSION_MAJOR);
@@ -198,7 +187,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         getFileSupport().writeInt(fd, compressedInts ? 1 : 0);
     }
 
-    public void patchFileHeader(SignedWord constantPoolPosition, SignedWord metadataPosition) throws IOException {
+    public void patchFileHeader(SignedWord constantPoolPosition, SignedWord metadataPosition) {
         long chunkSize = getFileSupport().position(fd).rawValue();
         long durationNanos = JfrTicks.currentTimeNanos() - chunkStartNanos;
         getFileSupport().seek(fd, WordFactory.signed(CHUNK_SIZE_OFFSET));
@@ -209,7 +198,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         getFileSupport().writeLong(fd, durationNanos);
     }
 
-    private SignedWord writeCheckpointEvent(JfrRepository[] repositories) throws IOException {
+    private SignedWord writeCheckpointEvent(JfrRepository[] repositories) {
         JfrSerializer[] serializers = JfrSerializerSupport.get().getSerializers();
         SignedWord start = beginEvent();
         writeCompressedLong(CONSTANT_POOL_TYPE_ID);
@@ -232,7 +221,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         return start;
     }
 
-    private int writeSerializers(JfrSerializer[] serializers) throws IOException {
+    private int writeSerializers(JfrSerializer[] serializers) {
         int count = 0;
         for (JfrSerializer serializer : serializers) {
             count += serializer.write(this);
@@ -240,7 +229,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         return count;
     }
 
-    private int writeRepositories(JfrRepository[] constantPools) throws IOException {
+    private int writeRepositories(JfrRepository[] constantPools) {
         int count = 0;
         for (JfrRepository constantPool : constantPools) {
             int poolCount = constantPool.write(this);
@@ -249,7 +238,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         return count;
     }
 
-    private SignedWord writeMetadataEvent(byte[] metadataDescriptor) throws IOException {
+    private SignedWord writeMetadataEvent(byte[] metadataDescriptor) {
         SignedWord start = beginEvent();
         writeCompressedLong(METADATA_TYPE_ID);
         writeCompressedLong(JfrTicks.elapsedTicks());
@@ -265,7 +254,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         return getFileSupport().isValid(fd) && getFileSupport().size(fd).greaterThan(WordFactory.signed(notificationThreshold));
     }
 
-    public SignedWord beginEvent() throws IOException {
+    public SignedWord beginEvent() {
         SignedWord start = getFileSupport().position(fd);
         // Write a placeholder for the size. Will be patched by endEvent,
         getFileSupport().writeInt(fd, 0);
@@ -273,7 +262,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     }
 
 
-    public void endEvent(SignedWord start) throws IOException {
+    public void endEvent(SignedWord start) {
         SignedWord end = getFileSupport().position(fd);
         SignedWord writtenBytes = end.subtract(start);
         getFileSupport().seek(fd, start);
@@ -281,27 +270,27 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         getFileSupport().seek(fd, end);
     }
 
-    public void writeBoolean(boolean value) throws IOException {
+    public void writeBoolean(boolean value) {
         assert lock.isHeldByCurrentThread() || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
         writeCompressedInt(value ? 1 : 0);
     }
 
-    public void writeByte(byte value) throws IOException {
+    public void writeByte(byte value) {
         assert lock.isHeldByCurrentThread() || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
         getFileSupport().writeByte(fd, value);
     }
 
-    public void writeBytes(byte[] values) throws IOException {
+    public void writeBytes(byte[] values) {
         assert lock.isHeldByCurrentThread() || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
         getFileSupport().write(fd, values);
     }
 
-    public void writeCompressedInt(int value) throws IOException {
+    public void writeCompressedInt(int value) {
         assert lock.isHeldByCurrentThread() || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
         writeCompressedLong(value & 0xFFFFFFFFL);
     }
 
-    public void writeCompressedLong(long value) throws IOException {
+    public void writeCompressedLong(long value) {
         assert lock.isHeldByCurrentThread() || VMOperationControl.isDedicatedVMOperationThread() && lock.isLocked();
         long v = value;
         if ((v & ~0x7FL) == 0L) {
@@ -373,7 +362,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         }
     }
 
-    public void writeString(String str) throws IOException {
+    public void writeString(String str) {
         // TODO: Implement writing strings in the other encodings
         if (str.isEmpty()) {
             getFileSupport().writeByte(fd, StringEncoding.EMPTY_STRING.byteValue);

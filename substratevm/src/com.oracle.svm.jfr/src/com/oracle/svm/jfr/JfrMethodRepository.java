@@ -76,7 +76,7 @@ public class JfrMethodRepository implements JfrRepository {
     }
 
     @Override
-    public int write(JfrChunkWriter writer) throws IOException {
+    public int write(JfrChunkWriter writer) {
         if (count == 0) {
             return 0;
         }
