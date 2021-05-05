@@ -253,7 +253,8 @@ class SubstrateJVM {
                 }
 
                 if (file != null) {
-                    chunkWriter.openFile(file);
+                    boolean validChunk = chunkWriter.openFile(file);
+                    globalMemory.setToDisk(validChunk);
                     // If in-memory recording was active so far, we should notify the recorder
                     // thread because the global memory buffers could be rather full.
                     if (!existingFile) {

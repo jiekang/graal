@@ -73,6 +73,7 @@ public final class JfrBufferAccess {
         Pointer pos = getDataStart(buffer);
         buffer.setPos(pos);
         buffer.setTop(pos);
+        buffer.setRetired(false);
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)

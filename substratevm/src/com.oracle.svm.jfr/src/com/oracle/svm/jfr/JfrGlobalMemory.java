@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.jfr;
 
+import com.oracle.svm.core.locks.VMMutex;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 import org.graalvm.nativeimage.UnmanagedMemory;
@@ -41,18 +42,31 @@ import com.oracle.svm.core.annotate.Uninterruptible;
  */
 public class JfrGlobalMemory {
     private static final int PROMOTION_RETRY_COUNT = 100;
+    private static final long discardThreshold = 2; // Begin discarding when there are only 2 free buffers
+
+    private final VMMutex retiredMutex;
 
     private long bufferCount;
+    private long toRetireCount;
     private long bufferSize;
+    private boolean toDisk = false;
     private JfrBuffers buffers;
+
+    private long retiredCount;
+    private JfrBuffer retiredHead;
+    private JfrBuffer retiredTail;
+
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public JfrGlobalMemory() {
+        retiredMutex = new VMMutex();
     }
 
     public void initialize(long globalBufferSize, long globalBufferCount) {
         this.bufferCount = globalBufferCount;
+        this.toRetireCount = bufferCount - discardThreshold;
         this.bufferSize = globalBufferSize;
+        this.retiredCount = 0;
 
         // Allocate all buffers eagerly.
         buffers = UnmanagedMemory.calloc(SizeOf.unsigned(JfrBuffer.class).multiply(WordFactory.unsigned(bufferCount)));
@@ -127,6 +141,13 @@ public class JfrGlobalMemory {
         for (int retry = 0; retry < retryCount; retry++) {
             for (int i = 0; i < bufferCount; i++) {
                 JfrBuffer buffer = buffers.addressOf(i).read();
+                if (buffer.getRetired()) {
+                    continue;
+                }
+                if (!JfrBufferAccess.getAvailableSize(buffer).aboveOrEqual(size)) {
+                    retireBuffer(buffer);
+                    continue;
+                }
                 if (JfrBufferAccess.getAvailableSize(buffer).aboveOrEqual(size) && JfrBufferAccess.acquire(buffer)) {
                     // Recheck the available size after acquiring the buffer.
                     if (JfrBufferAccess.getAvailableSize(buffer).aboveOrEqual(size)) {
@@ -146,13 +167,51 @@ public class JfrGlobalMemory {
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
-    private static void discardOldest() {
-        // TODO: implement
+    private void retireBuffer(JfrBuffer buffer) {
+        retiredMutex.lockNoTransition();
+        try {
+            if (buffer.getRetired() || JfrBufferAccess.isAcquired(buffer)) {
+                return;
+            }
+            assert !buffer.getRetired() && !JfrBufferAccess.isAcquired(buffer);
+            buffer.setRetired(true);
+            if (retiredHead != WordFactory.nullPointer()) {
+                retiredTail.setNext(buffer);
+                retiredTail = buffer;
+            } else {
+                retiredHead = buffer;
+                retiredTail = buffer;
+            }
+            retiredCount++;
+        } finally {
+            retiredMutex.unlock();
+        }
+    }
+
+    public void setToDisk(boolean toDisk) {
+        this.toDisk = toDisk;
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
-    private static boolean shouldDiscard() {
-        // TODO: implement
-        return false;
+    private void discardOldest() {
+        assert retiredHead.isNonNull() && retiredTail.isNonNull();
+        retiredMutex.lockNoTransition();
+        try {
+            JfrBuffer toDiscard = retiredHead;
+            JfrBufferAccess.reinitialize(toDiscard);
+            assert JfrBufferAccess.getUnflushedSize(toDiscard).equal(0);
+            if (retiredTail.equal(retiredHead)) {
+                retiredTail = retiredHead.getNext();
+            }
+            retiredHead = retiredHead.getNext();
+        } finally {
+            retiredMutex.unlock();
+        }
+        retiredCount--;
+    }
+
+    @Uninterruptible(reason = "Epoch must not change while in this method.")
+    private boolean shouldDiscard() {
+        return !toDisk && retiredCount >= toRetireCount;
     }
 }
