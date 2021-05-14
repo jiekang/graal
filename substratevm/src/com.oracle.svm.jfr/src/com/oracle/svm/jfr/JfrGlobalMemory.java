@@ -104,22 +104,15 @@ public class JfrGlobalMemory {
         if (promotionBuffer.isNull()) {
             return false;
         }
-        boolean shouldSignal;
-        JfrRecorderThread recorderThread = SubstrateJVM.getRecorderThread();
         try {
             // Copy all committed but not yet flushed memory to the promotion buffer.
             assert JfrBufferAccess.getAvailableSize(promotionBuffer).aboveOrEqual(unflushedSize);
             UnmanagedMemoryUtil.copy(threadLocalBuffer.getTop(), promotionBuffer.getPos(), unflushedSize);
             JfrBufferAccess.increasePos(promotionBuffer, unflushedSize);
-            shouldSignal = recorderThread.shouldSignal(promotionBuffer);
         } finally {
              releasePromotionBuffer(promotionBuffer);
         }
         JfrBufferAccess.increaseTop(threadLocalBuffer, unflushedSize);
-        // Notify the thread that writes the global memory to disk.
-        if (shouldSignal) {
-            recorderThread.signal();
-        }
         return true;
     }
 
@@ -145,12 +138,19 @@ public class JfrGlobalMemory {
                     continue;
                 }
                 if (JfrBufferAccess.acquire(buffer)) {
-                    assert !buffer.getRetired();
+                    if (buffer.getRetired()) {
+                        JfrBufferAccess.release(buffer);
+                        continue;
+                    }
                     if (JfrBufferAccess.getAvailableSize(buffer).aboveOrEqual(size)) {
                         return buffer;
                     }
                     retireBuffer(buffer);
                     JfrBufferAccess.release(buffer);
+                }
+                JfrRecorderThread recorderThread = SubstrateJVM.getRecorderThread();
+                if (recorderThread.shouldSignal()) {
+                    recorderThread.signal();
                 }
             }
         }
@@ -165,17 +165,19 @@ public class JfrGlobalMemory {
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
     private void retireBuffer(JfrBuffer buffer) {
+        assert JfrBufferAccess.isAcquired(buffer);
         retiredMutex.lockNoTransition();
         try {
-            assert !buffer.getRetired() && JfrBufferAccess.isAcquired(buffer);
+            if (buffer.getRetired()) {
+                return;
+            }
             buffer.setRetired(true);
-            if (retiredHead != WordFactory.nullPointer()) {
+            if (retiredHead.isNonNull()) {
                 retiredTail.setNext(buffer);
-                retiredTail = buffer;
             } else {
                 retiredHead = buffer;
-                retiredTail = buffer;
             }
+            retiredTail = buffer;
             retiredCount++;
         } finally {
             retiredMutex.unlock();
@@ -188,25 +190,43 @@ public class JfrGlobalMemory {
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
     private void discardOldest() {
-        assert retiredHead.isNonNull() && retiredTail.isNonNull();
-        retiredMutex.lockNoTransition();
-        try {
-            JfrBuffer toDiscard = retiredHead;
-            if (retiredTail.equal(retiredHead)) {
-                retiredTail = retiredHead.getNext();
-            }
-            retiredHead = retiredHead.getNext();
-
+        JfrBuffer toDiscard = removeRetiredBuffer();
+        if (toDiscard.isNonNull()) {
             JfrBufferAccess.reinitialize(toDiscard);
             assert JfrBufferAccess.getUnflushedSize(toDiscard).equal(0);
-            retiredCount--;
-        } finally {
-            retiredMutex.unlock();
+            JfrBufferAccess.release(toDiscard);
         }
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
     private boolean shouldDiscard() {
         return !toDisk && retiredCount >= toRetireCount;
+    }
+
+    public boolean hasRetiredBuffer() {
+        return retiredCount > 0;
+    }
+
+    @Uninterruptible(reason = "Epoch must not change while in this method.")
+    public JfrBuffer removeRetiredBuffer() {
+        retiredMutex.lockNoTransition();
+        try {
+            if (retiredCount < 1) {
+                return WordFactory.nullPointer();
+            }
+            assert retiredHead.isNonNull() && retiredTail.isNonNull();
+            JfrBuffer toRemove = retiredHead;
+            while (!JfrBufferAccess.acquire(toRemove)) {
+                JfrBufferAccess.acquire(toRemove);
+            }
+            if (retiredTail.equal(retiredHead)) {
+                retiredTail = retiredHead.getNext();
+            }
+            retiredHead = retiredHead.getNext();
+            retiredCount--;
+            return toRemove;
+        } finally {
+            retiredMutex.unlock();
+        }
     }
 }
