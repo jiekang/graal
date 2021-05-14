@@ -144,15 +144,12 @@ public class JfrGlobalMemory {
                 if (buffer.getRetired()) {
                     continue;
                 }
-                if (!JfrBufferAccess.getAvailableSize(buffer).aboveOrEqual(size)) {
-                    retireBuffer(buffer);
-                    continue;
-                }
-                if (JfrBufferAccess.getAvailableSize(buffer).aboveOrEqual(size) && JfrBufferAccess.acquire(buffer)) {
-                    // Recheck the available size after acquiring the buffer.
+                if (JfrBufferAccess.acquire(buffer)) {
+                    assert !buffer.getRetired();
                     if (JfrBufferAccess.getAvailableSize(buffer).aboveOrEqual(size)) {
                         return buffer;
                     }
+                    retireBuffer(buffer);
                     JfrBufferAccess.release(buffer);
                 }
             }
@@ -170,10 +167,7 @@ public class JfrGlobalMemory {
     private void retireBuffer(JfrBuffer buffer) {
         retiredMutex.lockNoTransition();
         try {
-            if (buffer.getRetired() || JfrBufferAccess.isAcquired(buffer)) {
-                return;
-            }
-            assert !buffer.getRetired() && !JfrBufferAccess.isAcquired(buffer);
+            assert !buffer.getRetired() && JfrBufferAccess.isAcquired(buffer);
             buffer.setRetired(true);
             if (retiredHead != WordFactory.nullPointer()) {
                 retiredTail.setNext(buffer);
@@ -198,16 +192,17 @@ public class JfrGlobalMemory {
         retiredMutex.lockNoTransition();
         try {
             JfrBuffer toDiscard = retiredHead;
-            JfrBufferAccess.reinitialize(toDiscard);
-            assert JfrBufferAccess.getUnflushedSize(toDiscard).equal(0);
             if (retiredTail.equal(retiredHead)) {
                 retiredTail = retiredHead.getNext();
             }
             retiredHead = retiredHead.getNext();
+
+            JfrBufferAccess.reinitialize(toDiscard);
+            assert JfrBufferAccess.getUnflushedSize(toDiscard).equal(0);
+            retiredCount--;
         } finally {
             retiredMutex.unlock();
         }
-        retiredCount--;
     }
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
