@@ -24,9 +24,6 @@
  */
 package com.oracle.svm.jfr;
 
-import static com.oracle.svm.jfr.PredefinedJFCSubstitition.DEFAULT_JFC;
-import static com.oracle.svm.jfr.PredefinedJFCSubstitition.PROFILE_JFC;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -84,15 +81,12 @@ public class JfrFeature implements Feature {
         ModuleSupport.exportAndOpenAllPackagesToUnnamed("java.base", false);
 
         JVM.getJVM().createNativeJFR();
-        SubstrateTypeLibrary.installSubstrateTypeLibrary();
 
         ImageSingletons.add(SubstrateJVM.class, new SubstrateJVM());
         ImageSingletons.add(JfrManager.class, new JfrManager());
-        ImageSingletons.add(JfrSerializerSupport.class, new JfrSerializerSupport());
         ImageSingletons.add(JfrTraceIdMap.class, new JfrTraceIdMap());
         ImageSingletons.add(JfrTraceIdEpoch.class, new JfrTraceIdEpoch());
 
-        JfrSerializerSupport.get().register(new JfrFrameTypeSerializer());
         ThreadListenerSupport.get().register(SubstrateJVM.getThreadLocal());
     }
 
@@ -105,11 +99,6 @@ public class JfrFeature implements Feature {
             RuntimeClassInitialization.initializeAtBuildTime(eventSubClass.getName());
         }
         config.registerSubstitutionProcessor(new JfrEventSubstitution(metaAccess));
-
-        // Register for runtime access.
-        ClassLoader cl = PredefinedJFCSubstitition.class.getClassLoader();
-        Resources.registerResource(DEFAULT_JFC, cl.getResourceAsStream(DEFAULT_JFC));
-        Resources.registerResource(PROFILE_JFC, cl.getResourceAsStream(PROFILE_JFC));
     }
 
     @Override

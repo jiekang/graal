@@ -199,7 +199,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
     }
 
     private SignedWord writeCheckpointEvent(JfrRepository[] repositories) {
-        JfrSerializer[] serializers = JfrSerializerSupport.get().getSerializers();
         SignedWord start = beginEvent();
         writeCompressedLong(CONSTANT_POOL_TYPE_ID);
         writeCompressedLong(JfrTicks.elapsedTicks());
@@ -210,8 +209,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         SignedWord poolCountPos = getFileSupport().position(fd);
         getFileSupport().writeInt(fd, 0); // We'll fix this later.
         // TODO: This should be simplified, serializers and repositories can probably go under the same structure.
-        int poolCount = writeSerializers(serializers);
-        poolCount += writeRepositories(repositories);
+        int poolCount = writeRepositories(repositories);
         SignedWord currentPos = getFileSupport().position(fd);
         getFileSupport().seek(fd, poolCountPos);
         getFileSupport().writeInt(fd, makePaddedInt(poolCount));
@@ -219,14 +217,6 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         endEvent(start);
 
         return start;
-    }
-
-    private int writeSerializers(JfrSerializer[] serializers) {
-        int count = 0;
-        for (JfrSerializer serializer : serializers) {
-            count += serializer.write(this);
-        }
-        return count;
     }
 
     private int writeRepositories(JfrRepository[] constantPools) {

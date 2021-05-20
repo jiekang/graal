@@ -27,7 +27,7 @@ package com.oracle.svm.jfr;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
-public class JfrFrameTypeSerializer implements JfrSerializer {
+public class JfrFrameTypeSerializer implements JfrRepository {
     @Platforms(Platform.HOSTED_ONLY.class)
     public JfrFrameTypeSerializer() {
     }
