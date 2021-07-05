@@ -40,6 +40,12 @@ import com.oracle.svm.core.util.VMError;
 @RawStructure
 public interface JfrBuffer extends PointerBase {
 
+    @RawField
+    JfrBuffer getNext();
+
+    @RawField
+    void setNext(JfrBuffer next);
+
     /**
      * Returns the size of the buffer.
      */
@@ -82,6 +88,11 @@ public interface JfrBuffer extends PointerBase {
     @RawField
     void setTop(Pointer value);
 
+    @RawFieldOffset
+    static int offsetOfTop() {
+        throw VMError.unimplemented(); // replaced
+    }
+
     @RawField
     int getAcquired();
 
@@ -96,4 +107,10 @@ public interface JfrBuffer extends PointerBase {
     static int offsetOfAcquired() {
         throw VMError.unimplemented(); // replaced
     }
+
+    @RawField
+    boolean getRetired();
+
+    @RawField
+    void setRetired(boolean value);
 }

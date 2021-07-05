@@ -110,10 +110,10 @@ public class JfrThreadLocal implements ThreadListener {
         dataLost.set(isolateThread, WordFactory.unsigned(0));
         javaEventWriter.set(isolateThread, null);
 
-        freeBuffer(javaBuffer.get(isolateThread));
+        JfrBufferAccess.retireBuffer(javaBuffer.get(isolateThread));
         javaBuffer.set(isolateThread, WordFactory.nullPointer());
 
-        freeBuffer(nativeBuffer.get(isolateThread));
+        JfrBufferAccess.retireBuffer(nativeBuffer.get(isolateThread));
         nativeBuffer.set(isolateThread, WordFactory.nullPointer());
     }
 
@@ -154,7 +154,7 @@ public class JfrThreadLocal implements ThreadListener {
         VMError.guarantee(traceId.get() > 0, "Thread local JFR data must be initialized");
         JfrBuffer result = javaBuffer.get();
         if (result.isNull()) {
-            result = JfrBufferAccess.allocate(WordFactory.unsigned(threadLocalBufferSize));
+            result = JfrThreadLocalMemory.acquireBuffer(threadLocalBufferSize);
             javaBuffer.set(result);
         }
         return result;
@@ -165,7 +165,7 @@ public class JfrThreadLocal implements ThreadListener {
         VMError.guarantee(traceId.get() > 0, "Thread local JFR data must be initialized");
         JfrBuffer result = nativeBuffer.get();
         if (result.isNull()) {
-            result = JfrBufferAccess.allocate(WordFactory.unsigned(threadLocalBufferSize));
+            result = JfrThreadLocalMemory.acquireBuffer(threadLocalBufferSize);
             nativeBuffer.set(result);
         }
         return result;
@@ -193,28 +193,43 @@ public class JfrThreadLocal implements ThreadListener {
     @Uninterruptible(reason = "Accesses a JFR buffer.")
     public static JfrBuffer flush(JfrBuffer threadLocalBuffer, UnsignedWord uncommitted, int requested) {
         assert threadLocalBuffer.isNonNull();
+        // TODO using acquired field is kind of a hack of the field knowing that
+        // it won't be used for thread local buffers elsewhere (yet?). Ideally
+        // there is similar synchronization in JfrBufferAccess to acquire top
+        boolean acquired = JfrBufferAccess.acquire(threadLocalBuffer);
+        while (!acquired) {
+            acquired = JfrBufferAccess.acquire(threadLocalBuffer);
+        }
+        try {
+            JfrBuffer result = threadLocalBuffer;
+            UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(threadLocalBuffer);
+            if (unflushedSize.equal(0)) {
+                JfrBufferAccess.reinitialize(threadLocalBuffer);
+                return threadLocalBuffer;
+            }
 
-        UnsignedWord unflushedSize = JfrBufferAccess.getUnflushedSize(threadLocalBuffer);
-        if (unflushedSize.aboveThan(0)) {
             JfrGlobalMemory globalMemory = SubstrateJVM.getGlobalMemory();
             if (!globalMemory.write(threadLocalBuffer, unflushedSize)) {
                 JfrBufferAccess.reinitialize(threadLocalBuffer);
                 writeDataLoss(threadLocalBuffer, unflushedSize);
                 return WordFactory.nullPointer();
             }
-        }
 
-        if (uncommitted.aboveThan(0)) {
-            // Copy all uncommitted memory to the start of the thread local buffer.
-            assert JfrBufferAccess.getDataStart(threadLocalBuffer).add(uncommitted).belowOrEqual(JfrBufferAccess.getDataEnd(threadLocalBuffer));
-            UnmanagedMemoryUtil.copy(threadLocalBuffer.getPos(), JfrBufferAccess.getDataStart(threadLocalBuffer), uncommitted);
+            if (uncommitted.aboveThan(0)) {
+                // Copy all uncommitted memory to the start of the thread local buffer.
+                assert JfrBufferAccess.getDataStart(threadLocalBuffer).add(uncommitted).belowOrEqual(JfrBufferAccess.getDataEnd(threadLocalBuffer));
+                UnmanagedMemoryUtil.copy(threadLocalBuffer.getPos(), JfrBufferAccess.getDataStart(threadLocalBuffer), uncommitted);
+            }
+            JfrBufferAccess.reinitialize(threadLocalBuffer);
+
+            assert JfrBufferAccess.getUnflushedSize(threadLocalBuffer).equal(0);
+            if (result.getSize().aboveOrEqual(uncommitted.add(requested))) {
+                return result;
+            }
+            return WordFactory.nullPointer();
+        } finally {
+            JfrBufferAccess.release(threadLocalBuffer);
         }
-        JfrBufferAccess.reinitialize(threadLocalBuffer);
-        assert JfrBufferAccess.getUnflushedSize(threadLocalBuffer).equal(0);
-        if (threadLocalBuffer.getSize().aboveOrEqual(uncommitted.add(requested))) {
-            return threadLocalBuffer;
-        }
-        return WordFactory.nullPointer();
     }
 
     @Uninterruptible(reason = "Accesses a JFR buffer.")
@@ -240,10 +255,5 @@ public class JfrThreadLocal implements ThreadListener {
         UnsignedWord result = dataLost.get().add(delta);
         dataLost.set(result);
         return result;
-    }
-
-    @Uninterruptible(reason = "Accesses a JFR buffer.")
-    private static void freeBuffer(JfrBuffer buffer) {
-        JfrBufferAccess.free(buffer);
     }
 }

@@ -86,6 +86,7 @@ public class JfrGlobalMemory {
 
     @Uninterruptible(reason = "Epoch must not change while in this method.")
     public boolean write(JfrBuffer threadLocalBuffer, UnsignedWord unflushedSize) {
+        assert JfrBufferAccess.isAcquired(threadLocalBuffer);
         JfrBuffer promotionBuffer = acquireBufferWithRetry(unflushedSize, PROMOTION_RETRY_COUNT);
         if (promotionBuffer.isNull()) {
             return false;

@@ -148,6 +148,7 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
      */
     public void closeFile(byte[] metadataDescriptor, JfrConstantPool[] repositories) {
         assert lock.isHeldByCurrentThread();
+        JfrThreadLocalMemory.writeBuffers(this);
         JfrCloseFileOperation op = new JfrCloseFileOperation();
         op.enqueue();
 

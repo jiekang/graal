@@ -58,6 +58,8 @@ public final class JfrBufferAccess {
         JfrBuffer result = ImageSingletons.lookup(UnmanagedMemorySupport.class).malloc(headerSize.add(dataSize));
         if (result.isNonNull()) {
             result.setSize(dataSize);
+            result.setNext(WordFactory.nullPointer());
+            result.setRetired(false);
             reinitialize(result);
         }
         return result;
@@ -129,5 +131,12 @@ public final class JfrBufferAccess {
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     public static boolean isEmpty(JfrBuffer buffer) {
         return getDataStart(buffer).equal(buffer.getPos());
+    }
+
+    @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+    public static void retireBuffer(JfrBuffer buffer) {
+        if (buffer.isNonNull()) {
+            buffer.setRetired(true);
+        }
     }
 }
