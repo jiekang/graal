@@ -80,6 +80,7 @@ public final class JfrThreadLocalMemory {
         }
     }
 
+    @Uninterruptible(reason = "Accesses a JFR buffer.")
     public static void writeBuffers(JfrChunkWriter writer) {
         JfrBuffer node = head;
         while (node.isNonNull()) {
