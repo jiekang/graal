@@ -27,6 +27,8 @@ package com.oracle.svm.jfr;
 //Checkstyle: allow reflection
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -34,7 +36,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.oracle.svm.core.util.VMError;
+import jdk.jfr.internal.SecuritySupport;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
+import org.graalvm.compiler.serviceprovider.GraalUnsafeAccess;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
@@ -63,6 +68,7 @@ import jdk.jfr.internal.JVM;
 import jdk.jfr.internal.jfc.JFC;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import org.graalvm.nativeimage.hosted.RuntimeReflection;
+import sun.misc.Unsafe;
 
 /**
  * Provides basic JFR support. As this support is both platform-dependent and JDK-specific, the
@@ -106,7 +112,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
 @AutomaticFeature
 public class JfrFeature implements Feature {
 
-    private final ConcurrentHashMap<Class, Boolean> fieldRegistration = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Class<? extends Event>, Boolean> fieldRegistration = new ConcurrentHashMap<>();
 
     @Override
     public boolean isInConfiguration(IsInConfigurationAccess access) {
@@ -122,7 +128,7 @@ public class JfrFeature implements Feature {
     public void afterRegistration(AfterRegistrationAccess access) {
         ModuleSupport.exportAndOpenAllPackagesToUnnamed("jdk.jfr", false);
         ModuleSupport.exportAndOpenAllPackagesToUnnamed("java.base", false);
-        ModuleSupport.exportAndOpenPackageToClass("jdk.internal.vm.ci", "jdk.vm.ci.hotspot", false, JfrEventSubstitution.class);
+        ModuleSupport.exportAndOpenPackageToClass("jdk.internal.vm.ci", "jdk.vm.ci.hotspot", false, JfrFeature.class);
 
         // Initialize some parts of JFR/JFC at image build time.
         List<Configuration> knownConfigurations = JFC.getConfigurations();
@@ -146,7 +152,9 @@ public class JfrFeature implements Feature {
         for (Class<?> eventSubClass : config.findSubclasses(Event.class)) {
             RuntimeClassInitialization.initializeAtBuildTime(eventSubClass.getName());
         }
-        config.registerSubstitutionProcessor(new JfrEventSubstitution(metaAccess));
+
+        ResolvedJavaType jdkJfrEventWriter = metaAccess.lookupJavaType(EventWriter.class);
+        changeWriterResetMethod(jdkJfrEventWriter);
     }
 
     @Override
@@ -186,13 +194,19 @@ public class JfrFeature implements Feature {
                         || c.getCanonicalName().equals("jdk.jfr.events.AbstractJDKEvent")) {
                     continue;
                 }
-                fieldRegistration.computeIfAbsent(c, this::registerEventHandler);
-
+                fieldRegistration.computeIfAbsent((Class<? extends Event>) c, this::registerEventHandler);
             }
         }
     }
 
-    private boolean registerEventHandler(Class c) {
+    private boolean registerEventHandler(Class<? extends Event> c) {
+        try {
+            SecuritySupport.registerEvent(c);
+            JfrJavaEvents.registerEventClass(c);
+            JVM.getJVM().retransformClasses(new Class<?>[]{c});
+        } catch (Throwable ex) {
+            throw VMError.shouldNotReachHere(ex);
+        }
         try {
             Field f = c.getDeclaredField("eventHandler");
             RuntimeReflection.register(f);
@@ -200,5 +214,52 @@ public class JfrFeature implements Feature {
             throw VMError.shouldNotReachHere("Unable to register eventHandler for: " + c.getCanonicalName(), e);
         }
         return Boolean.TRUE;
+    }
+
+    /**
+     * The method EventWriter.reset() is private but it is called by the EventHandler classes, which
+     * are generated automatically. To prevent bytecode parsing issues, we patch the visibility of
+     * that method using the hacky way below.
+     */
+    private static void changeWriterResetMethod(ResolvedJavaType eventWriterType) {
+        for (ResolvedJavaMethod m : eventWriterType.getDeclaredMethods()) {
+            if (m.getName().equals("reset")) {
+                setPublicModifier(m);
+            }
+        }
+    }
+
+    private static void setPublicModifier(ResolvedJavaMethod m) {
+        try {
+            Class<?> hotspotMethodClass = m.getClass();
+            Method metaspaceMethodM = getMethodToFetchMetaspaceMethod(hotspotMethodClass);
+            metaspaceMethodM.setAccessible(true);
+            long metaspaceMethod = (Long) metaspaceMethodM.invoke(m);
+            VMError.guarantee(metaspaceMethod != 0);
+            // Checkstyle: stop
+            Class<?> hotSpotVMConfigC = Class.forName("jdk.vm.ci.hotspot.HotSpotVMConfig");
+            // Checkstyle: resume
+            Method configM = hotSpotVMConfigC.getDeclaredMethod("config");
+            configM.setAccessible(true);
+            Field methodAccessFlagsOffsetF = hotSpotVMConfigC.getDeclaredField("methodAccessFlagsOffset");
+            methodAccessFlagsOffsetF.setAccessible(true);
+            Object hotSpotVMConfig = configM.invoke(null);
+            int methodAccessFlagsOffset = methodAccessFlagsOffsetF.getInt(hotSpotVMConfig);
+            Unsafe unsafe = GraalUnsafeAccess.getUnsafe();
+            int modifiers = unsafe.getInt(metaspaceMethod + methodAccessFlagsOffset);
+            int newModifiers = modifiers & ~Modifier.PRIVATE | Modifier.PUBLIC;
+            unsafe.putInt(metaspaceMethod + methodAccessFlagsOffset, newModifiers);
+        } catch (Exception ex) {
+            throw VMError.shouldNotReachHere(ex);
+        }
+    }
+
+    private static Method getMethodToFetchMetaspaceMethod(Class<?> method) throws NoSuchMethodException {
+        // The exact method depends on the JVMCI version.
+        try {
+            return method.getDeclaredMethod("getMetaspaceMethod");
+        } catch (NoSuchMethodException e) {
+            return method.getDeclaredMethod("getMetaspacePointer");
+        }
     }
 }
