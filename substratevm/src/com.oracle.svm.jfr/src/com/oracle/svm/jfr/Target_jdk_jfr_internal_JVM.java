@@ -370,4 +370,11 @@ public final class Target_jdk_jfr_internal_JVM {
     public long getChunkStartNanos() {
         return SubstrateJVM.get().getChunkStartNanos();
     }
+
+    /** See {@link JVM#flush()}. */
+    @Substitute
+    @TargetElement(onlyWith = JDK17OrLater.class)
+    public void flush() {
+        SubstrateJVM.get().flush();
+    }
 }

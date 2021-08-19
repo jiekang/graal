@@ -338,6 +338,11 @@ class SubstrateJVM {
         options.threadBufferSize.setUserValue(size);
     }
 
+    /** See {@link JVM#flush()}. */
+    @Uninterruptible(reason = "Accesses a JFR buffer.")
+    public void flush() {
+    }
+
     /** See {@link JVM#flush}. */
     @Uninterruptible(reason = "Accesses a JFR buffer.")
     public boolean flush(EventWriter writer, int uncommittedSize, int requestedSize) {
@@ -445,4 +450,5 @@ class SubstrateJVM {
         }
         return chunkStartNanos;
     }
+
 }
