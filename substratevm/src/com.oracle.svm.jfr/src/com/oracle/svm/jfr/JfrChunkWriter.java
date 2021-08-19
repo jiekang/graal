@@ -345,6 +345,10 @@ public final class JfrChunkWriter implements JfrUnlockedChunkWriter {
         return JfrNativeEventWriter.makePaddedInt(NumUtil.safeToInt(sizeWritten));
     }
 
+    public long getChunkStartNanos() {
+        return this.chunkStartNanos;
+    }
+
     public enum StringEncoding {
         NULL(0),
         EMPTY_STRING(1),

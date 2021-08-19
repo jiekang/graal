@@ -79,7 +79,8 @@ class JfrLogConfiguration {
         for (LogTag logTagSet : values) {
             JfrLogLevel logLevel = JfrLogLevel.WARNING;
             for (JfrLogSelection selection : selections) {
-                if ((selection.wildcard && LOG_TAG_SETS.get(logTagSet).containsAll(selection.tags)) || (selection.tags.equals(LOG_TAG_SETS.get(logTagSet)))) {
+                Set<JfrLogTag> set = LOG_TAG_SETS.get(logTagSet);
+                if (set != null && ((selection.wildcard && set.containsAll(selection.tags)) || (selection.tags.equals(set)))) {
                     logLevel = selection.level;
                     selection.matchesATagSet = true;
                 }

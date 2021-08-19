@@ -431,4 +431,18 @@ class SubstrateJVM {
         eventSettings[NumUtil.safeToInt(eventTypeId)].setCutoffTicks(cutoffTicks);
         return true;
     }
+
+    public long getChunkStartNanos() {
+        if (!unlockedChunkWriter.hasOpenFile()) {
+            return -1;
+        }
+        long chunkStartNanos = -1;
+        JfrChunkWriter writer = unlockedChunkWriter.lock();
+        try {
+            chunkStartNanos = writer.getChunkStartNanos();
+        } finally {
+            writer.unlock();
+        }
+        return chunkStartNanos;
+    }
 }

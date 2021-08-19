@@ -24,10 +24,14 @@
  */
 package com.oracle.svm.jfr;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
 import com.oracle.svm.core.jdk.JDK15OrEarlier;
 import com.oracle.svm.core.jdk.JDK17OrLater;
+import jdk.jfr.internal.EventInstrumentation;
+import jdk.jfr.internal.SecuritySupport;
+import jdk.jfr.internal.handlers.EventHandler;
 import org.graalvm.nativeimage.ProcessProperties;
 
 import com.oracle.svm.core.SubstrateUtil;
@@ -345,5 +349,25 @@ public final class Target_jdk_jfr_internal_JVM {
     @Substitute
     public boolean shouldRotateDisk() {
         return SubstrateJVM.get().shouldRotateDisk();
+    }
+
+    /** See {@link JVM#getHandler}. */
+    @Substitute
+    @TargetElement(onlyWith = JDK17OrLater.class)
+    public Object getHandler(Class<? extends jdk.internal.event.Event> eventClass) {
+        try {
+            Field f = eventClass.getDeclaredField("eventHandler");
+            Target_jdk_jfr_internal_SecuritySupport.setAccessible(f);
+            return f.get(null);
+        } catch (NoSuchFieldException | IllegalArgumentException | IllegalAccessException e) {
+            throw new InternalError("Could not access event handler");
+        }
+    }
+
+    /** See {@link JVM#getChunkStartNanos}. */
+    @Substitute
+    @TargetElement(onlyWith = JDK17OrLater.class)
+    public long getChunkStartNanos() {
+        return SubstrateJVM.get().getChunkStartNanos();
     }
 }

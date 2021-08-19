@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.jfr;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
 import com.oracle.svm.core.annotate.Alias;
@@ -52,4 +53,8 @@ public final class Target_jdk_jfr_internal_SecuritySupport {
 
     @Alias
     static native SafePath getPathInProperty(String prop, String subPath);
+
+    @Alias
+    static void setAccessible(Field field) {
+    }
 }

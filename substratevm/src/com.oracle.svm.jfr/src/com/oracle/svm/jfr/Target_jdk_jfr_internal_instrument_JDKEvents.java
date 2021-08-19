@@ -26,8 +26,11 @@ package com.oracle.svm.jfr;
 
 import com.oracle.svm.core.annotate.Alias;
 import com.oracle.svm.core.annotate.RecomputeFieldValue;
+import com.oracle.svm.core.annotate.Substitute;
 import com.oracle.svm.core.annotate.TargetClass;
 
+import com.oracle.svm.core.annotate.TargetElement;
+import com.oracle.svm.core.jdk.JDK17OrLater;
 import jdk.jfr.events.ActiveRecordingEvent;
 import jdk.jfr.events.ActiveSettingEvent;
 
@@ -43,4 +46,9 @@ final class Target_jdk_jfr_internal_instrument_JDKEvents {
     @Alias @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.FromAlias, isFinal = true) private static Class<?>[] instrumentationClasses = new Class<?>[]{};
 
     @Alias @RecomputeFieldValue(kind = RecomputeFieldValue.Kind.FromAlias, isFinal = true) private static Class<?>[] mirrorEventClasses = new Class<?>[]{};
+
+    @Substitute
+    @TargetElement(onlyWith = JDK17OrLater.class)
+    private static void initializeContainerEvents() {
+    }
 }
